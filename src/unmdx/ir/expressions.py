@@ -174,6 +174,7 @@ class FunctionCall(Expression):
     
     expression_type: ExpressionType = Field(default=ExpressionType.FUNCTION_CALL, frozen=True)
     function_type: FunctionType
+    function_name: str = ""  # Optional function name for custom functions
     arguments: List[Expression] = Field(default_factory=list)
     
     def to_dax(self) -> str:
@@ -299,3 +300,7 @@ class IifExpression(Expression):
         dependencies.extend(self.true_value.get_dependencies())
         dependencies.extend(self.false_value.get_dependencies())
         return dependencies
+
+
+# Alias for backwards compatibility
+ConditionalExpression = IifExpression

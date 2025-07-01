@@ -79,6 +79,11 @@ class MemberReference(Expression):
     hierarchy: str
     member: str
     
+    @property
+    def member_name(self) -> str:
+        """Get member name for compatibility."""
+        return self.member
+    
     def to_dax(self) -> str:
         """Convert member reference to DAX syntax."""
         # In DAX, member references are typically used in filters
@@ -175,6 +180,11 @@ class FunctionCall(Expression):
     expression_type: ExpressionType = Field(default=ExpressionType.FUNCTION_CALL, frozen=True)
     function_type: FunctionType
     arguments: List[Expression] = Field(default_factory=list)
+    
+    @property
+    def function_name(self) -> str:
+        """Get function name as string for compatibility."""
+        return self.function_type.value
     
     def to_dax(self) -> str:
         """Convert function call to DAX syntax."""

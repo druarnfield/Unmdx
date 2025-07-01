@@ -88,6 +88,9 @@ class MDXGrammarValidator:
 
             logger.info(f"Grammar validation complete. Valid: {result['valid']}")
 
+        except GrammarValidationError:
+            # Re-raise grammar validation errors
+            raise
         except Exception as e:
             result["errors"].append(f"Validation failed: {str(e)}")
             logger.error(f"Grammar validation error: {e}")
@@ -113,6 +116,10 @@ class MDXGrammarValidator:
         }
 
         try:
+            # Load grammar if not already loaded
+            if not self.grammar_text:
+                self._load_grammar()
+                
             # Create parser
             parser = Lark(
                 self.grammar_text,
@@ -147,6 +154,7 @@ class MDXGrammarValidator:
             results["parse_errors"].append({
                 "error": f"Failed to create parser: {str(e)}"
             })
+            results["success_rate"] = 0.0
             logger.error(f"Grammar test setup failed: {e}")
 
         return results

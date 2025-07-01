@@ -304,26 +304,24 @@ class MDXTreeAnalyzer:
 
     def _extract_axis_name(self, axis_spec: Tree) -> str:
         """Extract axis name from axis specification."""
-        axis_node = self._find_first_node_in_subtree(axis_spec, "axis")
-        if not axis_node:
-            return "unknown"
-
-        # Check the axis type
-        if axis_node.data == "axis_columns":
-            return "columns"
-        elif axis_node.data == "axis_rows":
-            return "rows"
-        elif axis_node.data == "axis_pages":
-            return "pages"
-        elif axis_node.data == "axis_chapters":
-            return "chapters"
-        elif axis_node.data == "axis_sections":
-            return "sections"
-        elif axis_node.data in ("axis_number", "axis_number_short"):
-            # Extract the number
-            for child in axis_node.children:
-                if isinstance(child, Token) and child.type == "NUMBER":
-                    return f"axis_{child.value}"
+        # Look for axis-related nodes directly
+        for child in axis_spec.children:
+            if isinstance(child, Tree):
+                if child.data == "axis_columns":
+                    return "columns"
+                elif child.data == "axis_rows":
+                    return "rows"
+                elif child.data == "axis_pages":
+                    return "pages"
+                elif child.data == "axis_chapters":
+                    return "chapters"
+                elif child.data == "axis_sections":
+                    return "sections"
+                elif child.data in ("axis_number", "axis_number_short"):
+                    # Extract the number
+                    for grandchild in child.children:
+                        if isinstance(grandchild, Token) and grandchild.type == "NUMBER":
+                            return f"axis_{grandchild.value}"
 
         return "unknown"
 
@@ -363,6 +361,37 @@ class MDXTreeAnalyzer:
 
     def _extract_filter_from_member(self, member_expr: Tree) -> dict[str, Any] | None:
         """Extract filter information from member expression."""
+        # Check if this is a member function (e.g., .&[2023])
+        member_function = self._find_first_node_in_subtree(member_expr, "member_function")
+        if member_function:
+            # Extract the base member (dimension and hierarchy)
+            qualified_member = self._find_first_node_in_subtree(member_function, "qualified_member")
+            if qualified_member:
+                bracketed_ids = self._find_nodes_in_subtree(qualified_member, "bracketed_identifier")
+                
+                dimension = None
+                level = None
+                if len(bracketed_ids) >= 2:
+                    dimension = bracketed_ids[0].children[0].value if bracketed_ids[0].children else None
+                    level = bracketed_ids[1].children[0].value if bracketed_ids[1].children else None
+                
+                # Extract the value from member function (after the &)
+                value = None
+                # Look for bracketed_identifier that's a direct child of member_function (not in qualified_member)
+                for child in member_function.children:
+                    if isinstance(child, Tree) and child.data == "bracketed_identifier":
+                        value = child.children[0].value if child.children else None
+                        break
+                
+                if dimension:
+                    return {
+                        "dimension": dimension,
+                        "level": level,
+                        "value": value,
+                        "operator": "equals"
+                    }
+        
+        # Fall back to regular member expression handling
         qualified_members = self._find_nodes_in_subtree(member_expr, "qualified_member")
 
         for qm in qualified_members:

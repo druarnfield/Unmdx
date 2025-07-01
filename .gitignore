@@ -73,6 +73,9 @@ output/
 temp/
 logs/
 
+# Local development files
+CLAUDE.md
+
 # Documentation builds
 docs/_build/
 site/

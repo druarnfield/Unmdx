@@ -42,7 +42,12 @@ def convert(
 @app.command()
 def explain(
     input_file: Path = typer.Argument(..., help="Input MDX file"),
-    format: str = typer.Option("sql", "--format", "-f", help="Explanation format"),
+    format: str = typer.Option("sql", "--format", "-f", help="Explanation format (sql, natural, json, markdown)"),
+    detail: str = typer.Option("standard", "--detail", "-d", help="Detail level (minimal, standard, detailed)"),
+    output: Path = typer.Option(None, "--output", "-o", help="Output file path"),
+    include_dax: bool = typer.Option(False, "--include-dax", help="Include DAX comparison"),
+    include_metadata: bool = typer.Option(False, "--include-metadata", help="Include query metadata"),
+    use_linter: bool = typer.Option(True, "--use-linter/--no-linter", help="Apply MDX linter optimizations"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """Generate human-readable explanation of MDX query."""
@@ -58,8 +63,54 @@ def explain(
         raise typer.Exit(1)
 
     console.print(f"[green]✓[/green] Found input file: {input_file}")
-    # TODO: Implement explanation logic
-    console.print("[yellow]Explanation not yet implemented[/yellow]")
+
+    try:
+        # Import here to avoid circular dependencies
+        from ..explainer import ExplainerGenerator, ExplanationConfig, ExplanationFormat, ExplanationDetail
+        
+        # Validate format
+        try:
+            explanation_format = ExplanationFormat(format.lower())
+        except ValueError:
+            console.print(f"[red]Error: Invalid format '{format}'. Valid options: sql, natural, json, markdown[/red]")
+            raise typer.Exit(1)
+        
+        # Validate detail level
+        try:
+            explanation_detail = ExplanationDetail(detail.lower())
+        except ValueError:
+            console.print(f"[red]Error: Invalid detail level '{detail}'. Valid options: minimal, standard, detailed[/red]")
+            raise typer.Exit(1)
+        
+        # Create configuration
+        config = ExplanationConfig(
+            format=explanation_format,
+            detail=explanation_detail,
+            include_dax_comparison=include_dax,
+            include_metadata=include_metadata,
+            use_linter=use_linter
+        )
+        
+        # Generate explanation
+        generator = ExplainerGenerator(debug=verbose)
+        explanation = generator.explain_file(input_file, config, output)
+        
+        # Display results
+        if output:
+            console.print(f"[green]✓[/green] Explanation written to: {output}")
+        else:
+            console.print("\n" + "="*50)
+            console.print(explanation)
+            console.print("="*50)
+        
+        console.print(f"[green]✓[/green] Successfully explained {input_file}")
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        if verbose:
+            import traceback
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command()

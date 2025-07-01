@@ -38,15 +38,15 @@ class TestParserLinterIntegration:
         """Sample messy MDX queries that would benefit from linting."""
         return [
             # Redundant parentheses (common Necto pattern)
-            \"\"\"
+            """
             SELECT 
                 (((([Measures].[Sales Amount])))) ON COLUMNS,
                 (((NON EMPTY (([Product].[Category].Members))))) ON ROWS
             FROM [Sales Cube]
-            \"\"\",
+            """,
             
             # Nested CrossJoins that could be simplified
-            \"\"\"
+            """
             SELECT 
                 [Measures].[Sales Amount] ON COLUMNS,
                 CROSSJOIN(
@@ -57,20 +57,20 @@ class TestParserLinterIntegration:
                     [Product].[Category].Members
                 ) ON ROWS
             FROM [Sales Cube]
-            \"\"\",
+            """,
             
             # Duplicate member specifications
-            \"\"\"
+            """
             SELECT 
                 {[Measures].[Sales Amount], [Measures].[Cost Amount]} ON COLUMNS,
                 {[Product].[Category].[Electronics], 
                  [Product].[Category].[Clothing],
                  [Product].[Category].[Electronics]} ON ROWS
             FROM [Sales Cube]
-            \"\"\",
+            """,
             
             # Complex calculated member with redundant parentheses
-            \"\"\"
+            """
             WITH MEMBER [Measures].[Profit Margin] AS 
                 IIF(
                     (([Measures].[Sales Amount])) <> 0,
@@ -80,7 +80,7 @@ class TestParserLinterIntegration:
             SELECT 
                 {[Measures].[Sales Amount], [Measures].[Profit Margin]} ON COLUMNS
             FROM [Sales Cube]
-            \"\"\"
+            """
         ]
     
     def test_parser_linter_basic_integration(self, parser, conservative_linter, sample_messy_mdx_queries):
@@ -300,12 +300,12 @@ class TestParserLinterIntegration:
     def test_linter_maintains_semantic_correctness(self, parser, conservative_linter, transformer):
         """Test that linter maintains semantic correctness for transformation."""
         # Simple query that should parse, lint, and transform successfully
-        simple_mdx = \"\"\"
+        simple_mdx = """
         SELECT 
             ([Measures].[Sales Amount]) ON COLUMNS,
             ([Product].[Category].Members) ON ROWS
         FROM [Sales Cube]
-        \"\"\"
+        """
         
         try:
             # Parse original

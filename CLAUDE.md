@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Note**: This file (CLAUDE.md) is local-only and not committed to git. All project documentation files have been moved to the `docs/` directory for better organization.
+
+## Documentation Structure
+
+All project documentation has been organized in the `docs/` directory:
+- **Architecture**: `docs/ir_spec.md`, `docs/IR_ARCHITECTURE.md`
+- **Specifications**: `docs/mdx_spec.md`, `docs/dax_spec.md`, `docs/linter_spec.md`
+- **Grammar**: `docs/mdx_grammar_spec_pt1.md`, `docs/mdx_grammar_spec_pt2.md`
+- **Project Management**: `docs/project_overview.md`, `docs/ir_transformer.md`
+- **Test Cases**: `docs/test_cases_basic.md`, `docs/test_cases_advanced.md`, `docs/test_cases_fail.md`
+- **Examples**: `examples/queries/` directory contains sample MDX files
+
+## Package Management
+
+This project uses **uv** for Python package management instead of pip/poetry. Common commands:
+- `uv sync` - Install dependencies and sync environment
+- `uv add <package>` - Add a new dependency
+- `uv run <command>` - Run commands in the uv environment
+- `uv run pytest` - Run tests
+- `uv run python -m unmdx.cli.main` - Run the CLI
+
 ## Project Overview
 
 This is a comprehensive Python CLI tool for converting MDX queries (particularly messy output from Necto SSAS cubes) into clean, optimized DAX queries with human-readable explanations.

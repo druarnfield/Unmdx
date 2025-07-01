@@ -1,0 +1,283 @@
+//===========================
+// MDX Grammar for Lark Parser
+// Designed to handle poorly formatted MDX from Necto SSAS cubes
+//===========================
+
+?start: query
+
+query: with_clause? select_statement
+
+// WITH clause for calculated members and named sets
+with_clause: "WITH"i with_item+
+
+with_item: member_definition
+         | set_definition
+
+member_definition: "MEMBER"i qualified_member "AS"i value_expression format_clause?
+
+set_definition: "SET"i set_alias "AS"i set_expression
+
+format_clause: ","? "FORMAT_STRING"i "=" string_literal
+
+// SELECT statement - the core of MDX
+select_statement: "SELECT"i axis_specification_list "FROM"i cube_specification where_clause?
+
+axis_specification_list: axis_specification ("," axis_specification)*
+
+axis_specification: non_empty? set_expression "ON"i axis
+
+non_empty: "NON"i "EMPTY"i
+
+axis: "COLUMNS"i        -> axis_columns
+    | "ROWS"i           -> axis_rows  
+    | "PAGES"i          -> axis_pages
+    | "CHAPTERS"i       -> axis_chapters
+    | "SECTIONS"i       -> axis_sections
+    | "AXIS"i "(" NUMBER ")"   -> axis_number
+    | NUMBER            -> axis_number_short  // Allow "ON 0" syntax
+
+// WHERE clause (slicer)
+where_clause: "WHERE"i slicer_specification
+
+slicer_specification: tuple_expression
+                    | member_expression
+                    | "(" ")"  // Empty WHERE clause
+
+//===========================
+// Cube Specification
+//===========================
+
+cube_specification: bracketed_identifier
+                  | identifier
+                  | qualified_name
+
+//===========================
+// Set Expressions
+//===========================
+
+set_expression: "{" set_content? "}"  // Allow empty sets
+              | function_call
+              | member_expression  // Single member is a valid set
+              | set_expression set_operator set_expression  // Set operations
+
+set_content: set_element ("," set_element)* ","?  // Allow trailing comma
+
+?set_element: tuple_expression
+            | member_expression
+            | set_expression  // Allow nested sets
+            | member_range
+
+member_range: member_expression ":" member_expression
+
+// Set operators  
+set_operator: "+"  // Union
+            | "-"  // Except
+            | "*"  // CrossJoin
+
+//===========================
+// Tuple Expressions
+//===========================
+
+tuple_expression: "(" tuple_content ")"
+
+tuple_content: member_expression ("," member_expression)*
+
+//===========================
+// Member Expressions
+//===========================
+
+member_expression: qualified_member
+                 | bracketed_identifier
+                 | member_function
+                 | current_member
+                 | default_member
+
+// Handle various member reference formats
+qualified_member: hierarchy_expression "." level_expression "." member_identifier
+                | hierarchy_expression "." member_identifier
+                | dimension_expression "." hierarchy_expression "." member_identifier
+                | dimension_expression "." member_identifier
+
+// Member functions
+member_function: member_expression "." "Members"i
+               | member_expression "." "Children"i
+               | member_expression "." "Parent"i
+               | member_expression "." "FirstChild"i
+               | member_expression "." "LastChild"i
+               | member_expression "." "Lead"i "(" numeric_expression ")"
+               | member_expression "." "Lag"i "(" numeric_expression ")"
+               | member_expression "." "&" bracketed_identifier  // Key reference like .&[2023]
+
+// Current/default member references
+current_member: hierarchy_expression "." "CurrentMember"i
+              | dimension_expression "." "CurrentMember"i
+
+default_member: hierarchy_expression "." "DefaultMember"i
+              | dimension_expression "." "DefaultMember"i
+
+//===========================
+// Function Calls
+//===========================
+
+function_call: function_name "(" function_args? ")"
+
+function_name: "CROSSJOIN"i
+             | "FILTER"i
+             | "DESCENDANTS"i
+             | "ANCESTORS"i
+             | "MEMBERS"i
+             | "ALLMEMBERS"i
+             | "CHILDREN"i
+             | "TOPCOUNT"i
+             | "BOTTOMCOUNT"i
+             | "ORDER"i
+             | "HIERARCHIZE"i
+             | "DISTINCT"i
+             | "UNION"i
+             | "INTERSECT"i
+             | "EXCEPT"i
+             | "GENERATE"i
+             | "NONEMPTY"i
+             | "AGGREGATE"i
+             | "AVG"i
+             | "COUNT"i
+             | "MAX"i
+             | "MIN"i
+             | "SUM"i
+             | "PARALLELPERIOD"i
+             | identifier  // Allow custom functions
+
+function_args: function_arg ("," function_arg)*
+
+?function_arg: set_expression
+             | value_expression
+             | numeric_expression
+             | logical_expression
+             | level_specification
+
+//===========================
+// Value Expressions
+//===========================
+
+?value_expression: numeric_expression
+                 | string_expression
+                 | member_expression
+                 | tuple_expression
+                 | calculation_expression
+                 | case_expression
+                 | iif_expression
+
+calculation_expression: value_expression arithmetic_op value_expression
+                      | "(" calculation_expression ")"
+                      | function_call
+
+arithmetic_op: "+" | "-" | "*" | "/"
+
+?numeric_expression: NUMBER
+                   | member_expression
+                   | calculation_expression
+                   | "(" numeric_expression ")"
+
+?string_expression: string_literal
+                  | member_expression
+                  | string_expression "&" string_expression  // String concatenation
+
+//===========================
+// Advanced Expressions
+//===========================
+
+// CASE expressions
+case_expression: simple_case | searched_case
+
+simple_case: "CASE"i value_expression when_clause+ else_clause? "END"i
+
+searched_case: "CASE"i when_condition+ else_clause? "END"i
+
+when_clause: "WHEN"i value_expression "THEN"i value_expression
+
+when_condition: "WHEN"i logical_expression "THEN"i value_expression
+
+else_clause: "ELSE"i value_expression
+
+// IIF expressions
+iif_expression: "IIF"i "(" logical_expression "," value_expression "," value_expression ")"
+
+//===========================
+// Logical Expressions
+//===========================
+
+logical_expression: comparison_expression
+                  | logical_expression "AND"i logical_expression
+                  | logical_expression "OR"i logical_expression
+                  | "NOT"i logical_expression
+                  | "(" logical_expression ")"
+
+comparison_expression: value_expression comparison_op value_expression
+
+comparison_op: "=" | "<>" | "<" | ">" | "<=" | ">="
+
+//===========================
+// Identifiers and Literals
+//===========================
+
+// Dimension/hierarchy/level specifications
+dimension_expression: bracketed_identifier | identifier
+hierarchy_expression: bracketed_identifier | identifier
+level_expression: bracketed_identifier | identifier
+level_specification: bracketed_identifier | identifier | NUMBER
+
+// Member identifiers can be complex
+member_identifier: bracketed_identifier
+                 | identifier
+                 | compound_identifier
+
+compound_identifier: identifier ("." identifier)+
+
+// Qualified names for cubes
+qualified_name: bracketed_identifier "." bracketed_identifier
+              | identifier "." identifier
+
+// Set aliases for WITH SET
+set_alias: bracketed_identifier | identifier
+
+// Bracketed identifiers - the most common form
+bracketed_identifier: "[" BRACKETED_ID_CONTENT "]"
+
+// Simple identifiers
+identifier: CNAME
+
+// String literals
+string_literal: ESCAPED_STRING
+
+//===========================
+// Comments (including optimizer hints)
+//===========================
+
+COMMENT: "/*" /(.|\n|\r)*?/ "*/"
+       | "--" /[^\n\r]*/
+       | "//" /[^\n\r]*/
+
+//===========================
+// Terminals
+//===========================
+
+// Content inside brackets - very permissive
+BRACKETED_ID_CONTENT: /[^\[\]]+/
+
+// Standard identifier
+CNAME: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+// Numbers
+NUMBER: /[+-]?[0-9]+(\.[0-9]+)?/
+
+// Strings
+ESCAPED_STRING: /"[^"]*"/
+              | /'[^']*'/
+
+//===========================
+// Whitespace and Ignored
+//===========================
+
+%import common.WS
+%ignore WS
+%ignore COMMENT

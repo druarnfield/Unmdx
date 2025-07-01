@@ -1,0 +1,1 @@
+"""MDX Linter rules package."""

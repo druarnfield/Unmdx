@@ -141,3 +141,9 @@ class FunctionType(Enum):
     DIVIDE = "DIVIDE"
     ROUND = "ROUND"
     ABS = "ABS"
+    FLOOR = "FLOOR"
+    CEILING = "CEILING"
+    
+    # Additional functions
+    DISTINCT_COUNT = "DISTINCTCOUNT"
+    COALESCE = "COALESCE"

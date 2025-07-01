@@ -175,26 +175,30 @@ class MDXTransformer:
         )
     
     def _extract_cube_reference(self, tree: Tree) -> CubeReference:
-        """Extract cube reference from FROM clause."""
+        """Extract cube reference from cube specification."""
         self.current_context = "cube_reference"
         
-        # Look for FROM clause
-        from_nodes = self._find_nodes(tree, "from_clause")
-        if not from_nodes:
-            raise TransformationError("No FROM clause found in query")
-        
-        from_node = from_nodes[0]
-        
-        # Extract cube identifier
-        cube_nodes = self._find_nodes(from_node, "cube_identifier")
+        # Look for cube_specification (actual parser output)
+        cube_nodes = self._find_nodes(tree, "cube_specification")
         if not cube_nodes:
-            # Try to find any identifier in FROM clause
-            identifiers = self._find_nodes(from_node, "identifier")
-            if not identifiers:
-                raise TransformationError("No cube identifier found in FROM clause")
-            cube_name = self._extract_identifier_value(identifiers[0])
+            # Fallback: try old from_clause format for compatibility
+            from_nodes = self._find_nodes(tree, "from_clause")
+            if not from_nodes:
+                raise TransformationError("No cube specification found in query")
+            cube_node = from_nodes[0]
         else:
-            cube_name = self._extract_identifier_value(cube_nodes[0])
+            cube_node = cube_nodes[0]
+        
+        # Extract cube name from bracketed_identifier
+        bracketed_ids = self._find_nodes(cube_node, "bracketed_identifier")
+        if bracketed_ids:
+            cube_name = self._extract_identifier_value(bracketed_ids[0])
+        else:
+            # Try to find any identifier in cube specification
+            identifiers = self._find_nodes(cube_node, "identifier")
+            if not identifiers:
+                raise TransformationError("No cube identifier found in cube specification")
+            cube_name = self._extract_identifier_value(identifiers[0])
         
         # Check for database/schema qualifiers
         database = None

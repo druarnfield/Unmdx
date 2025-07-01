@@ -51,20 +51,35 @@ target-version = ['py310']
 [tool.ruff]
 target-version = "py310"
 line-length = 88
+
+[tool.ruff.lint]
 select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "UP", # pyupgrade
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "S",   # flake8-bandit
+    "T20", # flake8-print
+    "Q",   # flake8-quotes
 ]
 ignore = [
     "E501",  # line too long, handled by black
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
+    "S101",  # assert used
+    "T201",  # print found
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["S101", "T201"]  # Allow assert and print in tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["unmdx"]
+force-sort-within-sections = true
 
 [tool.mypy]
 python_version = "3.10"

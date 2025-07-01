@@ -1,7 +1,7 @@
 """
 UnMDX - MDX to DAX Converter
 
-A comprehensive Python CLI tool that converts MDX queries (particularly messy output 
+A comprehensive Python CLI tool that converts MDX queries (particularly messy output
 from Necto SSAS cubes) into clean, optimized DAX queries with human-readable explanations.
 """
 

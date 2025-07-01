@@ -1,0 +1,44 @@
+// Simplified MDX Grammar for Lark Parser
+// Focus on core SELECT-FROM-WHERE functionality
+
+?start: mdx_statement
+
+// Core statement structure
+mdx_statement: select_statement
+
+// SELECT statement
+select_statement: "SELECT" axis_specification_list "FROM" cube_specification [where_clause]
+
+// Axis specifications
+axis_specification_list: axis_specification ("," axis_specification)*
+axis_specification: set_expression "ON" axis_name
+axis_name: "COLUMNS" | "ROWS" 
+
+// Set expressions - simplified
+set_expression: set_literal | set_function
+set_literal: "{" set_content "}"
+set_content: member_expression ("," member_expression)*
+
+// Set functions - core subset only
+set_function: members_function
+members_function: member_path "." "Members"
+
+// Member expressions - simplified
+member_expression: member_path
+member_path: "[" member_part "]" ("." "[" member_part "]")*
+member_part: MEMBER_NAME
+
+// Cube specification - simplified
+cube_specification: "[" MEMBER_NAME "]"
+
+// WHERE clause - simplified
+where_clause: "WHERE" "(" member_expression ")"
+
+// Terminals
+MEMBER_NAME: /[^[\]]+/
+%import common.WS
+%ignore WS
+
+// Comments
+%ignore /--[^\r\n]*/
+%ignore /\/\*[\s\S]*?\*\//

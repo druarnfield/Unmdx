@@ -1,43 +1,88 @@
 # UnMDX Documentation
 
-This directory contains comprehensive documentation for the UnMDX project.
+Welcome to the comprehensive documentation for UnMDX - the MDX to DAX converter with human-readable explanations.
 
-## Architecture & Design
+## 📚 Documentation Overview
 
-- **[IR_ARCHITECTURE.md](IR_ARCHITECTURE.md)** - Intermediate Representation architecture overview
-- **[ir_spec.md](ir_spec.md)** - Complete IR specification with examples  
-- **[ir_transformer.md](ir_transformer.md)** - MDX to IR transformation details
+### For Users
 
-## Language Specifications
+- **[User Guide](user-guide/)** - Getting started, tutorials, and usage guides
+  - [Getting Started](user-guide/getting-started.md) - Installation and first steps
+  - [Tutorials](user-guide/tutorials/) - Step-by-step guides
+- **[CLI Reference](cli/commands.md)** - Complete command-line documentation
+- **[Configuration Guide](configuration/options.md)** - All configuration options
+- **[Examples](../examples/)** - Real-world MDX conversion examples
 
-- **[mdx_spec.md](mdx_spec.md)** - MDX language specification
-- **[mdx_grammar_spec_pt1.md](mdx_grammar_spec_pt1.md)** - MDX grammar part 1 (core constructs)
-- **[mdx_grammar_spec_pt2.md](mdx_grammar_spec_pt2.md)** - MDX grammar part 2 (advanced features)
-- **[dax_spec.md](dax_spec.md)** - DAX output generation specification
+### For Developers
 
-## Component Specifications
+- **[API Reference](api/)** - Python API documentation
+- **[Integration Guides](integrations/)** - Integrating UnMDX with other tools
+- **[Troubleshooting](troubleshooting/common-issues.md)** - Common issues and solutions
 
-- **[linter_spec.md](linter_spec.md)** - MDX linter and optimizer specification
+### Technical Documentation
 
-## Project Management
+- **Architecture & Design**
+  - **[IR_ARCHITECTURE.md](IR_ARCHITECTURE.md)** - Intermediate Representation architecture
+  - **[ir_spec.md](ir_spec.md)** - Complete IR specification with examples
+  - **[ir_transformer.md](ir_transformer.md)** - MDX to IR transformation documentation
 
-- **[project_overview.md](project_overview.md)** - Complete project plan with milestones and progress
+- **Language Specifications**
+  - **[mdx_spec.md](mdx_spec.md)** - MDX language specification
+  - **[mdx_grammar_spec_pt1.md](mdx_grammar_spec_pt1.md)** - MDX grammar (core constructs)
+  - **[mdx_grammar_spec_pt2.md](mdx_grammar_spec_pt2.md)** - MDX grammar (advanced features)
+  - **[dax_spec.md](dax_spec.md)** - DAX output generation specification
 
-## Test Cases
+- **Component Specifications**
+  - **[linter_spec.md](linter_spec.md)** - MDX linter and optimizer specification
 
-- **[test_cases_basic.md](test_cases_basic.md)** - Basic test cases (Tests 1-10)
-- **[test_cases_advanced.md](test_cases_advanced.md)** - Advanced test cases (Tests 11-20)
-- **[test_cases_fail.md](test_cases_fail.md)** - Failure test cases (Tests 21-30)
+- **Project Management**
+  - **[project_overview.md](project_overview.md)** - Project plan with milestones
 
-## Quick Start
+- **Test Cases**
+  - **[test_cases_basic.md](test_cases_basic.md)** - Basic test cases (Tests 1-10)
+  - **[test_cases_advanced.md](test_cases_advanced.md)** - Advanced test cases (Tests 11-20)
+  - **[test_cases_fail.md](test_cases_fail.md)** - Failure test cases (Tests 21-30)
 
-For getting started with the project, see the main [README.md](../README.md) in the project root.
+## 🚀 Quick Start
 
-## Implementation Status
+New to UnMDX? Start here:
 
-As of the latest update:
-- ✅ **7 of 11 milestones completed**
-- ✅ Core functionality: Parser, IR, Transformer, DAX Generator, Linter, Explainer
-- 🔄 **Current focus**: Python Package API Design (Milestone 8)
+1. **[Getting Started Guide](user-guide/getting-started.md)** - Install and run your first conversion
+2. **[CLI Commands](cli/commands.md)** - Learn the command-line interface
+3. **[Examples](../examples/)** - See real MDX conversions
 
-For detailed progress tracking, see [project_overview.md](project_overview.md).
+## 📊 Project Status
+
+The project is currently at **7 of 12 milestones completed**:
+
+### ✅ Completed Milestones
+1. Project Setup & Infrastructure
+2. MDX Grammar & Parser
+3. Intermediate Representation (IR)
+4. MDX to IR Transformer
+5. DAX Generator
+6. MDX Linter & Optimizer
+7. Human-Readable Output & Explanations
+
+### 🚧 In Progress
+8. Python Package API Design
+9. **Comprehensive User Documentation** (NEW)
+
+### ⏳ Remaining
+10. Package Distribution & CI/CD
+11. Documentation & Examples
+12. Performance & Production Readiness
+
+## 🔍 Finding Information
+
+- **Users**: Start with the [User Guide](user-guide/)
+- **Developers**: Check the [API Reference](api/) and technical specs
+- **Contributors**: See [project_overview.md](project_overview.md) for development plans
+
+## 🆘 Getting Help
+
+- Check the [Troubleshooting Guide](troubleshooting/common-issues.md)
+- Browse the [FAQ](troubleshooting/common-issues.md#faq)
+- Report issues on [GitHub](https://github.com/druarnfield/unmdx/issues)
+
+For detailed progress tracking and implementation status, see [project_overview.md](project_overview.md).

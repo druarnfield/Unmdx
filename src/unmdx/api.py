@@ -8,6 +8,7 @@ full access to advanced features through configuration.
 
 import hashlib
 import time
+import traceback
 from pathlib import Path
 from typing import Optional, Union, Dict, Any
 import tracemalloc
@@ -21,11 +22,11 @@ from .results import (
     ConversionResult, ParseResult, ExplanationResult, OptimizationResult,
     PerformanceStats, Warning
 )
-from .parser.mdx_parser import MDXParser, MDXParseError
-from .transformer.mdx_transformer import MDXTransformer, TransformationError
-from .dax_generator.dax_generator import DAXGenerator, DAXGenerationError
-from .linter.mdx_linter import MDXLinter
-from .explainer.generator import ExplainerGenerator, ExplanationConfig, ExplanationFormat, ExplanationDetail
+from .parser import MDXParser, MDXParseError
+from .transformer import MDXTransformer, TransformationError
+from .dax_generator import DAXGenerator, DAXGenerationError
+from .linter import MDXLinter
+from .explainer import ExplainerGenerator, ExplanationConfig, ExplanationFormat, ExplanationDetail
 from .utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -148,7 +149,7 @@ def mdx_to_dax(
             
             try:
                 linter = MDXLinter()
-                lint_report = linter.lint_tree(parse_tree, config.linter)
+                optimized_tree, lint_report = linter.lint(parse_tree, mdx_text)
                 
                 # Add optimization info to result
                 result.optimization_applied = True
@@ -440,12 +441,11 @@ def optimize_mdx(
         
         try:
             linter = MDXLinter()
-            lint_report = linter.lint_tree(parse_tree, config.linter)
+            optimized_tree, lint_report = linter.lint(parse_tree, mdx_text)
             
-            # Get optimized text from the linter
-            # Note: This would need to be implemented in the actual linter
-            # For now, we'll use the original text as a placeholder
-            result.optimized_mdx = mdx_text  # TODO: Get actual optimized text from linter
+            # Convert optimized tree back to MDX text
+            # For now we'll use the original text as linter may not preserve text format
+            result.optimized_mdx = mdx_text  # TODO: Implement tree-to-text conversion
             
             # Populate result with linting information
             result.rules_applied = lint_report.rules_applied.copy()

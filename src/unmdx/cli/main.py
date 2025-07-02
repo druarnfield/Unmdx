@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 def convert(
     input_file: Path = typer.Argument(..., help="Input MDX file"),
     output: Path = typer.Option(None, "--output", "-o", help="Output DAX file"),
+    optimization_level: str = typer.Option("moderate", "--optimization-level", help="Optimization level (none, conservative, moderate, aggressive)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """Convert MDX file to DAX."""
@@ -35,8 +36,49 @@ def convert(
         raise typer.Exit(1)
 
     console.print(f"[green]✓[/green] Found input file: {input_file}")
-    # TODO: Implement conversion logic
-    console.print("[yellow]Conversion not yet implemented[/yellow]")
+
+    try:
+        # Import here to avoid circular dependencies
+        from ..api import mdx_to_dax
+        from ..config import create_default_config, OptimizationLevel
+        
+        # Read input file
+        with open(input_file, 'r', encoding='utf-8') as f:
+            mdx_content = f.read()
+        
+        # Create configuration
+        config = create_default_config()
+        try:
+            config.linter.optimization_level = OptimizationLevel(optimization_level.lower())
+        except ValueError:
+            console.print(f"[red]Error: Invalid optimization level '{optimization_level}'. Valid options: none, conservative, moderate, aggressive[/red]")
+            raise typer.Exit(1)
+        
+        # Convert MDX to DAX
+        result = mdx_to_dax(mdx_content, config=config)
+        
+        # Output results
+        if output:
+            with open(output, 'w', encoding='utf-8') as f:
+                f.write(result.dax_query)
+            console.print(f"[green]✓[/green] DAX query written to: {output}")
+        else:
+            console.print("\n" + "="*50)
+            console.print(result.dax_query)
+            console.print("="*50)
+        
+        # Show summary
+        console.print(f"[green]✓[/green] Successfully converted {input_file}")
+        console.print(f"Processing time: {result.performance.total_time:.2f}s")
+        if result.optimization_applied:
+            console.print(f"Optimization level: {result.optimization_level}")
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        if verbose:
+            import traceback
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command()

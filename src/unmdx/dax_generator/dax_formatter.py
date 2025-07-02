@@ -92,12 +92,13 @@ class DAXFormatter:
         """Simple tokenization of DAX query."""
         # Pattern to match:
         # - Quoted strings (with escaped quotes)
-        # - Square bracket identifiers
+        # - Table[Column] references (keep together)
+        # - Square bracket identifiers alone
         # - Numbers
         # - Operators
         # - Keywords/identifiers
         # - Parentheses and commas
-        pattern = r'"(?:[^"]|"")*"|\'(?:[^\']|\'\')*\'|\[[^\]]+\]|[\d.]+|[<>=!]+|[\w]+|[(),]'
+        pattern = r'"(?:[^"]|"")*"|\'(?:[^\']|\'\')*\'|\w+\[[^\]]+\]|\[[^\]]+\]|[\d.]+|[<>=!]+|[\w]+|[(){},]'
         
         tokens = re.findall(pattern, dax_query)
         return tokens
@@ -110,6 +111,22 @@ class DAXFormatter:
         if token_upper in self.line_keywords:
             return True
         
+        # Opening brace for table literals starts new line after EVALUATE
+        if token == "{" and index > 0 and tokens[index - 1].upper() == "EVALUATE":
+            return True
+        
+        # SUMMARIZECOLUMNS starts new line after EVALUATE
+        if token_upper == "SUMMARIZECOLUMNS" and index > 0 and tokens[index - 1].upper() == "EVALUATE":
+            return True
+        
+        # Arguments after opening paren in SUMMARIZECOLUMNS should start new line
+        if index > 0 and tokens[index - 1] == "(" and self._previous_token_is_summarizecolumns(tokens, index - 1):
+            return True
+        
+        # Comma in SUMMARIZECOLUMNS arguments should start new line
+        if token == "," and self._in_summarizecolumns_context(tokens, index):
+            return True
+            
         # Comma in certain contexts (like measure definitions)
         if index > 0 and token == "," and self._in_measure_list(tokens, index):
             return False  # Keep measures on same line if short
@@ -118,6 +135,10 @@ class DAXFormatter:
     
     def _should_end_line(self, token: str, tokens: List[str], index: int) -> bool:
         """Check if token should end the current line."""
+        # Closing paren in SUMMARIZECOLUMNS should be on its own line 
+        if token == ")" and self._in_summarizecolumns_context(tokens, index):
+            return True
+            
         # Look ahead for certain patterns
         if index + 1 < len(tokens):
             next_token = tokens[index + 1].upper()
@@ -132,6 +153,29 @@ class DAXFormatter:
         if index >= 2:
             if tokens[index - 2].startswith('"') and tokens[index - 1] == ",":
                 return True
+        return False
+    
+    def _in_summarizecolumns_context(self, tokens: List[str], index: int) -> bool:
+        """Check if we're inside a SUMMARIZECOLUMNS function call."""
+        # Look backward for SUMMARIZECOLUMNS(
+        paren_count = 0
+        for i in range(index - 1, -1, -1):
+            if tokens[i] == ")":
+                paren_count += 1
+            elif tokens[i] == "(":
+                if paren_count == 0:
+                    # Found opening paren, check if it follows SUMMARIZECOLUMNS
+                    if i > 0 and tokens[i - 1].upper() == "SUMMARIZECOLUMNS":
+                        return True
+                    break
+                else:
+                    paren_count -= 1
+        return False
+    
+    def _previous_token_is_summarizecolumns(self, tokens: List[str], paren_index: int) -> bool:
+        """Check if the token before the given paren index is SUMMARIZECOLUMNS."""
+        if paren_index > 0:
+            return tokens[paren_index - 1].upper() == "SUMMARIZECOLUMNS"
         return False
     
     def _apply_indentation(self, lines: List[str]) -> List[str]:
@@ -149,6 +193,12 @@ class DAXFormatter:
             if first_token in ["ORDER BY", "RETURN"]:
                 indent_level = max(0, indent_level - 1)
             elif line_stripped.startswith(")"):
+                indent_level = max(0, indent_level - 1)
+            elif line_stripped.startswith("{"):
+                # Table literals should not be indented
+                indent_level = max(0, indent_level - 1)
+            elif first_token == "SUMMARIZECOLUMNS":
+                # SUMMARIZECOLUMNS should not be indented when following EVALUATE
                 indent_level = max(0, indent_level - 1)
             
             # Apply current indentation

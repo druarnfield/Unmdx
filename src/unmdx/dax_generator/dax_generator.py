@@ -33,7 +33,7 @@ class DAXGenerator:
     into executable DAX queries that can run against Power BI/SSAS models.
     """
     
-    def __init__(self, format_output: bool = True, debug: bool = False):
+    def __init__(self, format_output: bool = False, debug: bool = False):
         """
         Initialize the DAX generator.
         
@@ -161,27 +161,23 @@ class DAXGenerator:
     
     def _generate_evaluate_section(self, query: Query) -> str:
         """Generate EVALUATE section (main query)."""
-        lines = ["EVALUATE"]
-        
         # Determine the appropriate table expression
         if query.dimensions:
             # Use SUMMARIZECOLUMNS for dimensional queries
             table_expr = self._generate_summarizecolumns(query)
+            return f"EVALUATE\n{table_expr}"
         else:
             # Simple measure-only query
             table_expr = self._generate_measure_table(query)
-        
-        # Handle LIMIT/TOP if present
-        if query.limit and query.limit.offset == 0:
-            # Simple TOP N
-            table_expr = f"TOPN({query.limit.count}, {table_expr})"
-        elif query.limit:
-            # OFFSET not directly supported - add warning
-            self.warnings.append("OFFSET is not directly supported in DAX - consider using ranking functions")
-        
-        lines.append(table_expr)
-        
-        return '\n'.join(lines)
+            # Handle LIMIT/TOP if present
+            if query.limit and query.limit.offset == 0:
+                # Simple TOP N
+                table_expr = f"TOPN({query.limit.count}, {table_expr})"
+            elif query.limit:
+                # OFFSET not directly supported - add warning
+                self.warnings.append("OFFSET is not directly supported in DAX - consider using ranking functions")
+            
+            return f"EVALUATE\n{table_expr}"
     
     def _generate_summarizecolumns(self, query: Query) -> str:
         """Generate SUMMARIZECOLUMNS function for dimensional queries."""
@@ -214,7 +210,12 @@ class DAXGenerator:
         if not query.measures:
             return 'ROW("Value", BLANK())'
         
-        # Use ROW function for single row of measures
+        # For simple measure queries, use table literal syntax
+        if len(query.measures) == 1 and not query.filters:
+            measure = query.measures[0]
+            return f"{{ [{measure.name}] }}"
+        
+        # Use ROW function for multiple measures or filtered queries
         measure_pairs = []
         for measure in query.measures:
             name = measure.alias or measure.name
@@ -227,13 +228,10 @@ class DAXGenerator:
     def _generate_dimension_column(self, dimension: Dimension) -> str:
         """Generate column reference for a dimension."""
         table = dimension.hierarchy.table
-        column = dimension.level.name
+        column = dimension.level.name if dimension.level else dimension.hierarchy.name
         
-        # Format identifiers
-        table_formatted = self.formatter.format_identifier(table)
-        column_formatted = self.formatter.format_identifier(column)
-        
-        return f"{table_formatted}{column_formatted}"
+        # Generate proper table[column] format without extra spaces
+        return f"{table}[{column}]"
     
     def _generate_filter_arguments(self, filters: List[Filter], dimensions: List[Dimension]) -> List[str]:
         """Generate filter arguments for SUMMARIZECOLUMNS."""
@@ -336,20 +334,9 @@ class DAXGenerator:
             expr_dax = self.expression_converter.convert(measure.expression)
             return f"{self.formatter.escape_string(name)}, {expr_dax}"
         
-        # Handle standard aggregations
-        if measure.aggregation == AggregationType.CUSTOM:
-            # Just reference the measure
-            return f"{self.formatter.escape_string(name)}, [{measure.name}]"
-        else:
-            # Apply aggregation function
-            agg_func = self._get_aggregation_function(measure.aggregation)
-            if agg_func:
-                # For standard aggregations, we might need the base column
-                # This is simplified - in practice might need more context
-                return f"{self.formatter.escape_string(name)}, {agg_func}([{measure.name}])"
-            else:
-                # Default to just the measure reference
-                return f"{self.formatter.escape_string(name)}, [{measure.name}]"
+        # For standard measures, just reference them directly
+        # The aggregation is handled by the measure definition itself
+        return f"{self.formatter.escape_string(name)}, [{measure.name}]"
     
     def _get_aggregation_function(self, agg_type: AggregationType) -> Optional[str]:
         """Get DAX aggregation function for aggregation type."""

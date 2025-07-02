@@ -116,7 +116,7 @@ class DAXConfig:
     """Configuration for DAX generation."""
     
     # Output formatting
-    format_output: bool = True
+    format_output: bool = False
     indent_size: int = 4
     line_width: int = 100
     

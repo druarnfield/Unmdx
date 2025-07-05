@@ -288,9 +288,9 @@ class MDXTransformer:
         
         with_node = with_nodes[0]
         
-        # Extract calculated members
-        calc_member_nodes = self._find_nodes(with_node, "calculated_member")
-        for calc_node in calc_member_nodes:
+        # Extract member definitions (calculated members)
+        member_def_nodes = self._find_nodes(with_node, "member_definition")
+        for calc_node in member_def_nodes:
             calculation = self._transform_calculated_member(calc_node)
             if calculation:
                 calculations.append(calculation)
@@ -310,26 +310,39 @@ class MDXTransformer:
     def _transform_calculated_member(self, calc_node: Tree) -> Optional[Calculation]:
         """Transform a calculated member definition."""
         try:
-            # Extract member name
+            # Extract member name from qualified_member
             member_name = self._extract_calculated_member_name(calc_node)
             
-            # Extract expression
-            expr_nodes = self._find_nodes(calc_node, "expression")
+            # Extract expression - first try calculation_expression (directly in member_definition)
+            expr_nodes = self._find_nodes(calc_node, "calculation_expression")
             if not expr_nodes:
-                self._add_warning(f"No expression found for calculated member {member_name}")
-                return None
+                # Fallback to value_expression
+                expr_nodes = self._find_nodes(calc_node, "value_expression")
+                if not expr_nodes:
+                    expr_nodes = self._find_nodes(calc_node, "numeric_expression")
+                    if not expr_nodes:
+                        self._add_warning(f"No expression found for calculated member {member_name}")
+                        return None
             
-            expression = self._transform_expression(expr_nodes[0])
+            # Transform the expression properly
+            expression = self._transform_calculation_expression(expr_nodes[0])
             
             # Determine if this is a measure or member calculation
             calc_type = CalculationType.MEASURE  # Default to measure
             if self._is_member_calculation(calc_node):
                 calc_type = CalculationType.MEMBER
             
+            # Extract format string if present
+            format_string = None
+            format_nodes = self._find_nodes(calc_node, "format_clause")
+            if format_nodes:
+                format_string = self._extract_format_string(format_nodes[0])
+            
             return Calculation(
                 name=member_name,
                 calculation_type=calc_type,
-                expression=expression
+                expression=expression,
+                format_string=format_string
             )
             
         except Exception as e:
@@ -494,7 +507,24 @@ class MDXTransformer:
         if axis_rows:
             return 1
         
-        # Fallback: look for tokens
+        # Look for numeric axis nodes (ON 0, ON 1, etc.)
+        axis_number_short = self._find_nodes(axis_node, "axis_number_short")
+        if axis_number_short:
+            # Extract the number from within the axis_number_short node
+            for axis_num_node in axis_number_short:
+                for child in axis_num_node.children:
+                    if isinstance(child, Token) and child.type == "NUMBER":
+                        return int(str(child))
+        
+        axis_number = self._find_nodes(axis_node, "axis_number")
+        if axis_number:
+            # Extract the number from AXIS(n) syntax
+            for axis_num_node in axis_number:
+                for child in axis_num_node.children:
+                    if isinstance(child, Token) and child.type == "NUMBER":
+                        return int(str(child))
+        
+        # Fallback: look for direct tokens
         axis_tokens = [child for child in axis_node.children if isinstance(child, Token)]
         for token in axis_tokens:
             token_str = str(token).upper()
@@ -581,17 +611,121 @@ class MDXTransformer:
     
     def _extract_calculated_member_name(self, calc_node: Tree) -> str:
         """Extract name from calculated member definition."""
-        # Look for member name
-        name_nodes = self._find_nodes(calc_node, "member_name")
-        if name_nodes:
-            return self._extract_identifier_value(name_nodes[0])
+        # Look for qualified_member (the member name in member_definition)
+        qualified_member_nodes = self._find_nodes(calc_node, "qualified_member")
+        if qualified_member_nodes:
+            # Extract the member name from the qualified member
+            qualified_member = qualified_member_nodes[0]
+            # Look for the last bracketed_identifier or identifier (the member name part)
+            bracketed_ids = self._find_nodes(qualified_member, "bracketed_identifier")
+            if bracketed_ids:
+                # Get the last one (should be the member name)
+                return self._extract_identifier_value(bracketed_ids[-1])
+            
+            identifiers = self._find_nodes(qualified_member, "identifier")
+            if identifiers:
+                return self._extract_identifier_value(identifiers[-1])
         
-        # Fallback to any identifier
+        # Fallback to any identifier in the calc_node
         identifiers = self._find_nodes(calc_node, "identifier")
         if identifiers:
             return self._extract_identifier_value(identifiers[0])
         
         return "Unknown Member"
+    
+    def _transform_calculation_expression(self, expr_node: Tree) -> Expression:
+        """Transform a calculation expression from a WITH clause."""
+        # Handle calculation_expression which typically has: value_expression arithmetic_op value_expression
+        if expr_node.data == "calculation_expression":
+            # Look for the pattern: left_expr operator right_expr  
+            children = list(expr_node.children)
+            if len(children) >= 3:
+                # Extract left operand, operator, and right operand
+                left_expr = self._transform_member_to_measure_reference(children[0])
+                operator = self._extract_arithmetic_operator(children[1])
+                right_expr = self._transform_member_to_measure_reference(children[2])
+                
+                return BinaryOperation(left=left_expr, operator=operator, right=right_expr)
+        
+        # For value_expression that might contain a calculation_expression
+        calculation_exprs = self._find_nodes(expr_node, "calculation_expression")
+        if calculation_exprs:
+            return self._transform_calculation_expression(calculation_exprs[0])
+        
+        # Handle direct member expressions
+        member_exprs = self._find_nodes(expr_node, "member_expression")
+        if member_exprs:
+            # For measure references, extract the measure name
+            if len(member_exprs) == 1:
+                return self._transform_member_to_measure_reference(member_exprs[0])
+            else:
+                # Multiple member expressions - look for arithmetic operators
+                # This is a fallback for complex expressions
+                return self._transform_complex_calculation(expr_node)
+        
+        # Fallback: treat as constant
+        return Constant(value=str(expr_node))
+    
+    def _transform_member_to_measure_reference(self, member_expr: Tree) -> Expression:
+        """Transform a member expression to a measure reference for calculations."""
+        # Extract measure name from [Measures].[MeasureName] format
+        measure_name = self._extract_measure_name_from_member_expr(member_expr)
+        if measure_name:
+            return MeasureReference(measure_name=measure_name)
+        
+        # Fallback
+        return Constant(value=str(member_expr))
+    
+    def _extract_measure_name_from_member_expr(self, member_expr: Tree) -> Optional[str]:
+        """Extract measure name from a member expression like [Measures].[Sales Amount]."""
+        # Look for qualified_member structure
+        qualified_members = self._find_nodes(member_expr, "qualified_member") 
+        if qualified_members:
+            # Get all bracketed identifiers
+            bracketed_ids = self._find_nodes(qualified_members[0], "bracketed_identifier")
+            if len(bracketed_ids) >= 2:
+                # First should be [Measures], second should be the measure name
+                hierarchy_name = self._extract_identifier_value(bracketed_ids[0])
+                measure_name = self._extract_identifier_value(bracketed_ids[1])
+                if hierarchy_name and hierarchy_name.lower() == "measures":
+                    return measure_name
+        
+        # Fallback: look for any member_identifier
+        member_ids = self._find_nodes(member_expr, "member_identifier")
+        if member_ids:
+            bracketed_ids = self._find_nodes(member_ids[0], "bracketed_identifier")
+            if bracketed_ids:
+                return self._extract_identifier_value(bracketed_ids[0])
+        
+        return None
+    
+    def _extract_arithmetic_operator(self, op_node: Tree) -> str:
+        """Extract arithmetic operator from arithmetic_op node."""
+        if op_node.data == "arithmetic_op":
+            # Get the token representing the operator
+            for child in op_node.children:
+                if isinstance(child, Token):
+                    return str(child)  # Return the raw operator, BinaryOperation will handle conversion
+            
+            # If no children found, this indicates a parsing issue
+            # Try to infer the operator from context (this is a workaround)
+            self._add_warning("Empty arithmetic operator node - grammar parsing issue detected")
+            return "/"  # For calculated members, division is most common
+        return "+"  # Default fallback
+    
+    def _transform_complex_calculation(self, expr_node: Tree) -> Expression:
+        """Handle complex calculation expressions with multiple operands."""
+        # This is a simplified implementation for complex expressions
+        # For now, just create a constant with the expression text
+        return Constant(value=str(expr_node))
+    
+    def _extract_format_string(self, format_node: Tree) -> Optional[str]:
+        """Extract format string from format_clause."""
+        # Look for string_literal in the format clause
+        string_literals = self._find_nodes(format_node, "string_literal")
+        if string_literals:
+            return self._extract_identifier_value(string_literals[0])
+        return None
     
     def _is_member_calculation(self, calc_node: Tree) -> bool:
         """Determine if this is a member calculation vs measure calculation."""
@@ -718,20 +852,47 @@ class MDXTransformer:
     
     def _extract_hierarchy_name(self, member_expr: Tree) -> Optional[str]:
         """Extract hierarchy name from a member expression."""
+        # Look for hierarchy_expression nodes directly
         hierarchy_nodes = self._find_nodes(member_expr, "hierarchy_expression")
         for hierarchy_node in hierarchy_nodes:
             bracketed_ids = self._find_nodes(hierarchy_node, "bracketed_identifier")
             if bracketed_ids:
                 return self._extract_identifier_value(bracketed_ids[0])
+        
+        # For member_function nodes containing key references, extract from nested member_expression
+        member_funcs = self._find_nodes(member_expr, "member_function")
+        for func_node in member_funcs:
+            nested_member_exprs = self._find_nodes(func_node, "member_expression")
+            for nested_expr in nested_member_exprs:
+                hierarchy_nodes = self._find_nodes(nested_expr, "hierarchy_expression")
+                for hierarchy_node in hierarchy_nodes:
+                    bracketed_ids = self._find_nodes(hierarchy_node, "bracketed_identifier")
+                    if bracketed_ids:
+                        return self._extract_identifier_value(bracketed_ids[0])
+        
         return None
     
     def _extract_level_name(self, member_expr: Tree) -> Optional[str]:
         """Extract level name from a member expression."""
+        # Look for level_expression nodes directly
         level_nodes = self._find_nodes(member_expr, "level_expression")
         for level_node in level_nodes:
             bracketed_ids = self._find_nodes(level_node, "bracketed_identifier")
             if bracketed_ids:
                 return self._extract_identifier_value(bracketed_ids[0])
+        
+        # For member_function nodes containing key references, extract from nested member_expression
+        # In this case, the member_identifier in the nested expression is actually the level name
+        member_funcs = self._find_nodes(member_expr, "member_function")
+        for func_node in member_funcs:
+            nested_member_exprs = self._find_nodes(func_node, "member_expression")
+            for nested_expr in nested_member_exprs:
+                member_id_nodes = self._find_nodes(nested_expr, "member_identifier")
+                for member_id_node in member_id_nodes:
+                    bracketed_ids = self._find_nodes(member_id_node, "bracketed_identifier")
+                    if bracketed_ids:
+                        return self._extract_identifier_value(bracketed_ids[0])
+        
         return None
     
     def _extract_member_selection(self, member_expr: Tree) -> MemberSelection:
@@ -826,6 +987,12 @@ class MDXTransformer:
     
     def _extract_specific_member_value(self, member_expr: Tree) -> Optional[str]:
         """Extract the specific member value (just the member name, not qualified)."""
+        # First check for key references like .&[2023]
+        if self._has_key_reference(member_expr):
+            key_value = self._extract_key_reference_value(member_expr)
+            if key_value:
+                return key_value
+        
         # Get just the member name part for the filter value
         member_id_nodes = self._find_nodes(member_expr, "member_identifier")
         for member_id_node in member_id_nodes:
@@ -834,3 +1001,51 @@ class MDXTransformer:
             if bracketed_ids:
                 return self._extract_identifier_value(bracketed_ids[0])
         return None
+    
+    def _has_key_reference(self, member_expr: Tree) -> bool:
+        """Check if member expression has a key reference (.&[...])."""
+        # Look for member_function nodes that have a bracketed_identifier as direct child
+        # This indicates a key reference like .&[2023]
+        member_funcs = self._find_nodes(member_expr, "member_function")
+        for func_node in member_funcs:
+            # Check if this function node has a bracketed_identifier as a direct child
+            # (not nested within a member_expression)
+            for child in func_node.children:
+                if isinstance(child, Tree) and child.data == "bracketed_identifier":
+                    # Make sure it's not part of a nested member_expression
+                    nested_member_exprs = [c for c in func_node.children 
+                                         if isinstance(c, Tree) and c.data == "member_expression"]
+                    if nested_member_exprs:
+                        # If this bracketed_identifier is not contained in the nested member_expression,
+                        # it's a key reference
+                        if not self._is_ancestor_of(nested_member_exprs[0], child):
+                            return True
+        return False
+    
+    def _extract_key_reference_value(self, member_expr: Tree) -> Optional[str]:
+        """Extract the value from a key reference (.&[value])."""
+        member_funcs = self._find_nodes(member_expr, "member_function")
+        for func_node in member_funcs:
+            # The key reference value is in a bracketed_identifier that's a direct child
+            # after the nested member_expression
+            bracketed_ids = self._find_nodes(func_node, "bracketed_identifier")
+            # Skip the first bracketed_identifier (which is part of the nested member_expression)
+            # and get the one that contains the key value
+            nested_member_exprs = self._find_nodes(func_node, "member_expression")
+            if nested_member_exprs and bracketed_ids:
+                # The key value is typically the last bracketed_identifier in the member_function
+                for bracketed_id in reversed(bracketed_ids):
+                    # Check if this bracketed_identifier is not part of the nested member expression
+                    if not self._is_ancestor_of(nested_member_exprs[0], bracketed_id):
+                        return self._extract_identifier_value(bracketed_id)
+        return None
+    
+    def _is_ancestor_of(self, ancestor: Tree, descendant: Tree) -> bool:
+        """Check if ancestor tree contains descendant tree."""
+        if ancestor == descendant:
+            return True
+        if hasattr(ancestor, 'children'):
+            for child in ancestor.children:
+                if isinstance(child, Tree) and self._is_ancestor_of(child, descendant):
+                    return True
+        return False

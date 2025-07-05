@@ -59,6 +59,7 @@ set_expression: "{" set_content? "}"  // Allow empty sets
               | function_call
               | member_expression  // Single member is a valid set
               | set_expression set_operator set_expression  // Set operations
+              | "(" set_expression ")"  // Allow parentheses around set expressions
 
 set_content: set_element ("," set_element)* ","?  // Allow trailing comma
 

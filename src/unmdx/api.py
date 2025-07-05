@@ -326,7 +326,8 @@ def parse_mdx(
         result = ParseResult(
             ir_query=ir_query,
             query_hash=query_hash,
-            performance=perf_stats
+            performance=perf_stats,
+            parse_tree=parse_tree
         )
         
         # Add metadata if requested

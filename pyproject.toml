@@ -125,3 +125,8 @@ exclude_lines = [
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
 ]
+
+[tool.uv.workspace]
+members = [
+    "unmdx_mcp_server",
+]

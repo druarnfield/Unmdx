@@ -1,13 +1,15 @@
 """
-Simple MDX Parser for UnMDX v2 - Recovery Implementation
+MDX Parser for UnMDX v2 - Lark-based Implementation
 
-This parser focuses on WORKING functionality over perfect parsing.
-It handles the most common MDX patterns using regex-based matching.
+This parser uses Lark to provide robust parsing of MDX queries.
+It converts parse trees to structured data for DAX generation.
 """
 
-import re
 from typing import Dict, List, Optional, Any
 import logging
+
+from .lark_parser import LarkMDXParser
+from .lark_transformer import transform_parse_tree
 
 logger = logging.getLogger(__name__)
 
@@ -17,60 +19,22 @@ class MDXParseError(Exception):
     pass
 
 
-class SimpleMDXParser:
+class LarkBasedMDXParser:
     """
-    A simple, regex-based MDX parser that handles common patterns.
+    A Lark-based MDX parser that provides robust parsing.
     
     Supported patterns:
     1. SELECT {[Measures].[MeasureName]} ON 0 FROM [CubeName]
     2. SELECT {[Measures].[MeasureName]} ON COLUMNS, {[Dimension].[Hierarchy].Members} ON ROWS FROM [CubeName]
+    3. WHERE clauses with single and multiple filters
+    4. Complex nested structures and function calls
     
     Returns a consistent dict structure for downstream processing.
     """
     
     def __init__(self):
-        # Precompile regex patterns for better performance
-        self._setup_patterns()
-    
-    def _setup_patterns(self):
-        """Set up regex patterns for MDX parsing"""
-        
-        # Pattern to match measures: [Measures].[MeasureName]
-        self.measure_pattern = re.compile(
-            r'\[Measures\]\.\[([^\]]+)\]', 
-            re.IGNORECASE
-        )
-        
-        # Pattern to match dimensions: [Dimension].[Hierarchy].Members
-        self.dimension_pattern = re.compile(
-            r'\[([^\]]+)\]\.\[([^\]]+)\]\.Members', 
-            re.IGNORECASE
-        )
-        
-        # Pattern to match cube name: FROM [CubeName]
-        self.cube_pattern = re.compile(
-            r'FROM\s*\[([^\]]+)\]', 
-            re.IGNORECASE
-        )
-        
-        # Pattern to match the main SELECT structure
-        self.select_pattern = re.compile(
-            r'SELECT\s*(.+?)\s*FROM\s*', 
-            re.IGNORECASE | re.DOTALL
-        )
-        
-        # Pattern to split axes (ON 0, ON COLUMNS, ON ROWS)
-        # This pattern captures content up to ON, handling nested braces properly
-        self.axis_pattern = re.compile(
-            r'(\{(?:[^{}]|{[^{}]*})*\})\s+ON\s+(0|COLUMNS|ROWS|1)', 
-            re.IGNORECASE
-        )
-        
-        # Alternative pattern for when we need to find multiple axes separated by commas
-        self.multi_axis_pattern = re.compile(
-            r'(\{(?:[^{}]|{[^{}]*})*\})\s+ON\s+(0|COLUMNS|ROWS|1)(?:\s*,\s*(\{(?:[^{}]|{[^{}]*})*\})\s+ON\s+(0|COLUMNS|ROWS|1))?',
-            re.IGNORECASE
-        )
+        # Initialize the Lark parser
+        self.lark_parser = LarkMDXParser()
     
     def parse(self, mdx_query: str) -> Dict[str, Any]:
         """
@@ -92,131 +56,27 @@ class SimpleMDXParser:
             MDXParseError: If the query cannot be parsed
         """
         try:
-            # Clean up the query
-            cleaned_query = self._clean_query(mdx_query)
+            # Use Lark to parse the query
+            parse_result = self.lark_parser.parse(mdx_query)
             
-            # Extract cube name
-            cube_name = self._extract_cube_name(cleaned_query)
+            if not parse_result.success:
+                error_msg = f"Parse failed: {parse_result.error}"
+                if parse_result.error_line:
+                    error_msg += f" at line {parse_result.error_line}, column {parse_result.error_column}"
+                raise MDXParseError(error_msg)
             
-            # Extract SELECT portion
-            select_portion = self._extract_select_portion(cleaned_query)
+            # Transform the parse tree to structured data
+            structured_data = transform_parse_tree(parse_result.tree)
             
-            # Parse axes
-            measures, dimensions = self._parse_axes(select_portion)
+            logger.debug(f"Parsed MDX query: {structured_data}")
+            return structured_data
             
-            # Build result structure
-            result = {
-                "measures": measures,
-                "dimensions": dimensions,
-                "cube": cube_name,
-                "where_clause": None  # Not implemented yet
-            }
-            
-            logger.debug(f"Parsed MDX query: {result}")
-            return result
-            
+        except MDXParseError:
+            # Re-raise parse errors
+            raise
         except Exception as e:
             logger.error(f"Failed to parse MDX query: {str(e)}")
             raise MDXParseError(f"Failed to parse MDX query: {str(e)}")
-    
-    def _clean_query(self, query: str) -> str:
-        """Clean and normalize the MDX query"""
-        # Remove extra whitespace and newlines
-        cleaned = re.sub(r'\s+', ' ', query.strip())
-        
-        # Remove common redundant patterns
-        cleaned = re.sub(r'\{\s*\{([^}]+)\}\s*\}', r'{\1}', cleaned)  # Remove nested braces
-        cleaned = re.sub(r'\s*,\s*', ', ', cleaned)  # Normalize commas
-        
-        return cleaned
-    
-    def _extract_cube_name(self, query: str) -> str:
-        """Extract cube name from the query"""
-        match = self.cube_pattern.search(query)
-        if not match:
-            raise MDXParseError("Could not find cube name in query")
-        
-        return match.group(1)
-    
-    def _extract_select_portion(self, query: str) -> str:
-        """Extract the SELECT portion of the query"""
-        match = self.select_pattern.search(query)
-        if not match:
-            raise MDXParseError("Could not find SELECT portion in query")
-        
-        return match.group(1)
-    
-    def _parse_axes(self, select_portion: str) -> tuple[List[str], List[Dict[str, str]]]:
-        """Parse axes to extract measures and dimensions"""
-        measures = []
-        dimensions = []
-        
-        # Use a more robust approach to find all axes
-        # Split by comma first, then process each part
-        parts = self._split_axes(select_portion)
-        
-        for part in parts:
-            part = part.strip()
-            
-            # Check if this part contains an axis specification
-            axis_match = re.search(r'(\{.*\})\s+ON\s+(0|COLUMNS|ROWS|1)', part, re.IGNORECASE)
-            if axis_match:
-                axis_content = axis_match.group(1).strip()
-                
-                # Check if this axis contains measures
-                measure_matches = self.measure_pattern.findall(axis_content)
-                if measure_matches:
-                    measures.extend(measure_matches)
-                
-                # Check if this axis contains dimensions
-                dimension_matches = self.dimension_pattern.findall(axis_content)
-                for table, column in dimension_matches:
-                    dimensions.append({
-                        "table": table,
-                        "column": column,
-                        "selection_type": "members"
-                    })
-        
-        # If no measures found yet, search the entire select portion
-        if not measures:
-            # Look for all measures in the entire select portion
-            all_measures = self.measure_pattern.findall(select_portion)
-            if all_measures:
-                measures.extend(all_measures)
-        
-        return measures, dimensions
-    
-    def _split_axes(self, select_portion: str) -> List[str]:
-        """Split the select portion into individual axes, handling nested braces"""
-        parts = []
-        current_part = ""
-        brace_count = 0
-        
-        i = 0
-        while i < len(select_portion):
-            char = select_portion[i]
-            
-            if char == '{':
-                brace_count += 1
-                current_part += char
-            elif char == '}':
-                brace_count -= 1
-                current_part += char
-            elif char == ',' and brace_count == 0:
-                # We're at a top-level comma, split here
-                if current_part.strip():
-                    parts.append(current_part.strip())
-                current_part = ""
-            else:
-                current_part += char
-            
-            i += 1
-        
-        # Add the last part
-        if current_part.strip():
-            parts.append(current_part.strip())
-        
-        return parts
     
     def validate_query(self, mdx_query: str) -> bool:
         """
@@ -245,14 +105,19 @@ class SimpleMDXParser:
             "SELECT {[Measures].[MeasureName]} ON 0 FROM [CubeName]",
             "SELECT {[Measures].[MeasureName]} ON COLUMNS, {[Dimension].[Hierarchy].Members} ON ROWS FROM [CubeName]",
             "Multiple measures in single axis",
-            "Mixed measures and dimensions on different axes"
+            "Mixed measures and dimensions on different axes",
+            "WHERE clause with single filter: WHERE ([Dimension].[Hierarchy].&[Key])",
+            "WHERE clause with multiple filters: WHERE ([Dim1].[Hier1].&[Key1], [Dim2].[Hier2].&[Key2])",
+            "Complex nested structures and function calls",
+            "Calculated members with WITH clause",
+            "NON EMPTY clauses"
         ]
 
 
-# Convenience function for simple parsing
+# Convenience function for Lark-based parsing
 def parse_mdx(mdx_query: str) -> Dict[str, Any]:
     """
-    Parse an MDX query using the simple parser.
+    Parse an MDX query using the Lark-based parser.
     
     Args:
         mdx_query: The MDX query string to parse
@@ -263,17 +128,42 @@ def parse_mdx(mdx_query: str) -> Dict[str, Any]:
     Raises:
         MDXParseError: If parsing fails
     """
-    parser = SimpleMDXParser()
+    parser = LarkBasedMDXParser()
     return parser.parse(mdx_query)
 
 
-# Test the parser with the required example
+# Test the parser with the required examples
 if __name__ == "__main__":
-    # Test with the required example
-    test_query = "SELECT {[Measures].[Sales Amount]} ON 0 FROM [Adventure Works]"
+    # Test with the required examples
+    test_queries = [
+        "SELECT {[Measures].[Sales Amount]} ON 0 FROM [Adventure Works]",
+        
+        """SELECT {[Measures].[Sales Amount]} ON COLUMNS,
+{[Product].[Category].Members} ON ROWS
+FROM [Adventure Works]""",
+        
+        """SELECT {[Measures].[Sales Amount]} ON COLUMNS,
+{[Product].[Category].Members} ON ROWS
+FROM [Adventure Works]
+WHERE ([Date].[Calendar Year].&[2023])""",
+        
+        """SELECT {[Measures].[Sales Amount]} ON COLUMNS,
+{[Product].[Category].Members} ON ROWS
+FROM [Adventure Works]
+WHERE ([Date].[Calendar Year].&[2023], [Geography].[Country].&[United States])"""
+    ]
     
-    try:
-        result = parse_mdx(test_query)
-        print(f"Parsed successfully: {result}")
-    except MDXParseError as e:
-        print(f"Parse failed: {e}")
+    for i, test_query in enumerate(test_queries, 1):
+        print(f"\n=== Test Query {i} ===")
+        print(f"Query: {test_query[:50]}...")
+        
+        try:
+            result = parse_mdx(test_query)
+            print(f"✅ Parsed successfully")
+            print(f"  Measures: {result['measures']}")
+            print(f"  Dimensions: {result['dimensions']}")
+            print(f"  Cube: {result['cube']}")
+            if result['where_clause']:
+                print(f"  WHERE filters: {result['where_clause']['filters']}")
+        except MDXParseError as e:
+            print(f"❌ Parse failed: {e}")

@@ -72,9 +72,19 @@ class SimpleDAXGenerator:
             # Case 2 & 3: Measures with dimensions
             base_query = self._generate_with_dimensions(measures, dimensions)
             
-            # If there are WHERE clause filters, wrap with CALCULATETABLE
+            # Check if any dimension needs specific member filtering
+            specific_filters = self._extract_specific_member_filters(dimensions)
+            
+            # Combine WHERE clause filters with specific member filters
+            all_filters = []
             if where_clause and where_clause.get("filters"):
-                return self._wrap_with_calculatetable(base_query, where_clause.get("filters"))
+                all_filters.extend(where_clause.get("filters"))
+            if specific_filters:
+                all_filters.extend(specific_filters)
+            
+            # If there are any filters, wrap with CALCULATETABLE
+            if all_filters:
+                return self._wrap_with_calculatetable(base_query, all_filters)
             
             return base_query
             
@@ -108,10 +118,14 @@ class SimpleDAXGenerator:
         """
         dax_parts = ["EVALUATE", "SUMMARIZECOLUMNS("]
         
-        # Add dimensions
+        # Add dimensions (only include those that need to be in SUMMARIZECOLUMNS)
         for dimension in dimensions:
             table = dimension["table"]
             column = dimension["column"]
+            
+            # Skip specific member dimensions - they will be handled as filters
+            if dimension.get("selection_type") == "specific":
+                continue
             
             # Handle special cases for table names with spaces or reserved words
             # Quote table names that contain spaces, or are reserved words like 'Date'
@@ -212,6 +226,35 @@ class SimpleDAXGenerator:
         # Fallback - shouldn't happen with current implementation
         return base_query
     
+    def _extract_specific_member_filters(self, dimensions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Extract specific member filters from dimensions.
+        
+        Args:
+            dimensions: List of dimension dictionaries
+            
+        Returns:
+            List of filter dictionaries for specific members
+        """
+        filters = []
+        
+        for dimension in dimensions:
+            if dimension.get("selection_type") == "specific":
+                table = dimension["table"]
+                column = dimension["column"]
+                specific_members = dimension.get("specific_members", [])
+                
+                if specific_members:
+                    # Create an IN filter for specific members
+                    filters.append({
+                        "table": table,
+                        "column": column,
+                        "operator": "IN",
+                        "value": specific_members
+                    })
+        
+        return filters
+    
     def _generate_filter_expression(self, filter_item: Dict[str, Any]) -> str:
         """
         Generate a DAX filter expression from a filter dictionary.
@@ -233,19 +276,36 @@ class SimpleDAXGenerator:
         else:
             table_ref = f"{table}[{column}]"
         
-        # Handle value formatting based on type
-        if isinstance(value, str):
-            # String values need quotes
-            formatted_value = f'"{value}"'
+        # Handle different operators
+        if operator == "IN":
+            # Handle IN operator for specific members
+            if isinstance(value, list):
+                # Format each value in the list
+                formatted_values = []
+                for v in value:
+                    if isinstance(v, str):
+                        formatted_values.append(f'"{v}"')
+                    else:
+                        formatted_values.append(str(v))
+                
+                values_str = ", ".join(formatted_values)
+                return f"{table_ref} IN {{{values_str}}}"
+            else:
+                # Single value with IN operator
+                if isinstance(value, str):
+                    formatted_value = f'"{value}"'
+                else:
+                    formatted_value = str(value)
+                return f"{table_ref} IN {{{formatted_value}}}"
         else:
-            # Numeric values don't need quotes
-            formatted_value = str(value)
-        
-        # For now, we only support = operator
-        if operator == "=":
-            return f"{table_ref} = {formatted_value}"
-        else:
-            # Future enhancement: support other operators
+            # Handle = operator (and default case)
+            if isinstance(value, str):
+                # String values need quotes
+                formatted_value = f'"{value}"'
+            else:
+                # Numeric values don't need quotes
+                formatted_value = str(value)
+            
             return f"{table_ref} = {formatted_value}"
 
 
@@ -303,6 +363,19 @@ if __name__ == "__main__":
                 {"table": "Date", "column": "Calendar Year", "operator": "=", "value": 2023}
             ]
         }
+    }
+    
+    # Test Case 6: Specific member selection
+    test_case_6 = {
+        "measures": ["Sales Amount"],
+        "dimensions": [{
+            "table": "Product", 
+            "column": "Category", 
+            "selection_type": "specific",
+            "specific_members": ["Bikes", "Accessories"]
+        }],
+        "cube": "Adventure Works",
+        "where_clause": None
     }
     
     # Test Case 9: Multiple filters
@@ -367,6 +440,20 @@ CALCULATETABLE(
 )"""
         print(f"Expected:\n{expected_4}")
         print(f"Match: {dax_4 == expected_4}")
+        print()
+        
+        # Test Case 6: Specific member selection
+        dax_6 = generate_dax(test_case_6)
+        print(f"Test Case 6 DAX:\n{dax_6}")
+        expected_6 = """EVALUATE
+CALCULATETABLE(
+    SUMMARIZECOLUMNS(
+        "Sales Amount", [Sales Amount]
+    ),
+    Product[Category] IN {"Bikes", "Accessories"}
+)"""
+        print(f"Expected:\n{expected_6}")
+        print(f"Match: {dax_6 == expected_6}")
         print()
         
         # Test Case 9: Multiple filters

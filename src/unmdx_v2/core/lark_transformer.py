@@ -173,6 +173,35 @@ class MDXTransformer(Transformer):
                         "column": column,
                         "selection_type": "members"
                     })
+            
+            # Check if it's a specific member selection: [Table].[Column].[SpecificValue]
+            elif len(path_parts) >= 3 and path_parts[-1] != 'Members' and path_parts[-1] != 'Children':
+                table = path_parts[0]
+                column = path_parts[1]
+                specific_value = path_parts[2]
+                
+                # Skip if this is actually a measure or contains key references
+                if table == 'Measures' or any(part.startswith('&') for part in path_parts):
+                    return
+                
+                # Check if we already have this dimension
+                existing = next((d for d in self.dimensions if d['table'] == table and d['column'] == column), None)
+                if existing:
+                    # If it's already a 'specific' type, add to the list
+                    if existing['selection_type'] == 'specific':
+                        if specific_value not in existing['specific_members']:
+                            existing['specific_members'].append(specific_value)
+                    # If it's a 'members' type, leave it as is (members is broader)
+                    elif existing['selection_type'] == 'members':
+                        pass  # Keep as members since it's broader
+                else:
+                    # Create new dimension with specific member
+                    self.dimensions.append({
+                        "table": table,
+                        "column": column,
+                        "selection_type": "specific",
+                        "specific_members": [specific_value]
+                    })
     
     def _process_function_call(self, function_call):
         """Process function calls like CROSSJOIN"""
@@ -390,6 +419,35 @@ def transform_parse_tree(parse_tree: Tree) -> Dict[str, Any]:
                         "table": table,
                         "column": column,
                         "selection_type": "members"
+                    })
+            
+            # Check if it's a specific member selection: [Table].[Column].[SpecificValue]
+            elif len(path_parts) >= 3 and path_parts[-1] != 'Members' and path_parts[-1] != 'Children':
+                table = path_parts[0]
+                column = path_parts[1]
+                specific_value = path_parts[2]
+                
+                # Skip if this is actually a measure or contains key references
+                if table == 'Measures' or any(part.startswith('&') for part in path_parts):
+                    return
+                
+                # Check if we already have this dimension
+                existing = next((d for d in dimensions if d['table'] == table and d['column'] == column), None)
+                if existing:
+                    # If it's already a 'specific' type, add to the list
+                    if existing['selection_type'] == 'specific':
+                        if specific_value not in existing['specific_members']:
+                            existing['specific_members'].append(specific_value)
+                    # If it's a 'members' type, leave it as is (members is broader)
+                    elif existing['selection_type'] == 'members':
+                        pass  # Keep as members since it's broader
+                else:
+                    # Create new dimension with specific member
+                    dimensions.append({
+                        "table": table,
+                        "column": column,
+                        "selection_type": "specific",
+                        "specific_members": [specific_value]
                     })
     
     def process_where_clause(where_node):

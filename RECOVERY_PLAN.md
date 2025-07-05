@@ -194,8 +194,54 @@ Add features that make the tool enterprise-ready.
    - Comprehensive type hints
    - Configuration validation
 
-### Phase 4: Production Readiness (Weeks 9-12)
+### Phase 4: Production Readiness (Weeks 9-10)
 Make the tool ready for real-world deployment.
+
+### Phase 5: Edge Cases & Real-World Compatibility (Weeks 11-12)
+**NEW PHASE**: Handle uncommon but valid MDX patterns from real-world tools.
+
+**Goal**: Achieve 90%+ compatibility with production MDX from Oracle Necto, SSAS, Excel, and other tools.
+
+#### Week 11: Critical Edge Cases
+**Tasks:**
+1. **Fix Quoted Bracket Syntax**
+   - Support `SELECT "{}" ON ROWS` patterns from Oracle Necto
+   - Handle quoted member names: `{"[Measures].[Sales]"}`
+   - Add string literal support in set expressions
+
+2. **Implement Logical Expressions in WHERE**
+   - Support `WHERE [A] AND [B] OR [C]` patterns
+   - Add comparison operators: `>`, `<`, `>=`, `<=`, `<>`
+   - Handle `IN` expressions: `WHERE [Date] IN {[2023], [2024]}`
+
+3. **Fix WHERE Clause Transformation**
+   - Correct DAX generation for logical expressions
+   - Proper operator precedence handling
+   - Complex filter combining in CALCULATETABLE
+
+#### Week 12: Data Types & Advanced Patterns
+**Tasks:**
+1. **Data Type Literals**
+   - Currency symbols: `$1000`, `€999.99`
+   - Date literals: `#2023-01-01#`, `'2023/01/01'`
+   - Percentages: `50%`, scientific notation: `1.23E+10`
+
+2. **Advanced MDX Statements**
+   - SCOPE statements: `SCOPE([Date].[Year].[2023]) ... END SCOPE`
+   - DRILLTHROUGH syntax
+   - Member navigation: Lead/Lag functions
+
+3. **Tool-Specific Compatibility**
+   - Nested comment handling: `/* outer /* inner */ */`
+   - Excel MDX quirks validation
+   - IBM TM1/Cognos specific patterns
+
+**Success Criteria:**
+- 90%+ success rate on comprehensive edge case test suite
+- Production compatibility with Oracle Necto output
+- Robust handling of real-world "messy" MDX
+
+**Priority**: HIGH - Required for production deployment with real-world tools.
 
 #### Week 9: Integration & Testing
 **Goal**: Comprehensive test coverage

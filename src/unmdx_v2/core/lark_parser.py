@@ -288,16 +288,176 @@ class LarkMDXParser:
         name = None
         expression = None
         
-        for i, child in enumerate(member_def_node.children):
-            if child.data == 'member_expr' and i == 1:  # After MEMBER keyword
-                name = self._extract_member_expr(child)
-            elif child.data in ['expression', 'arithmetic_expr'] and i > 2:  # After AS
-                expression = self._get_text(child)
+        # member_def structure: [member_expr, arithmetic_expr]
+        # First child is the member name, second is the expression
+        if len(member_def_node.children) >= 2:
+            # Extract member name
+            if member_def_node.children[0].data == 'member_expr':
+                name = self._extract_member_expr(member_def_node.children[0])
+            
+            # Extract expression (second child)
+            expression_node = member_def_node.children[1]
+            if expression_node.data in ['divide', 'multiply', 'add', 'subtract', 'paren_expr', 'expression']:
+                expression = self._extract_expression(expression_node)
         
         if name and expression:
             return {
                 'name': name,
                 'expression': expression
+            }
+        
+        return None
+    
+    def _extract_expression(self, expression_node: Tree) -> Optional[Dict[str, Any]]:
+        """Extract arithmetic expression into a structured format."""
+        if not isinstance(expression_node, Tree):
+            return None
+        
+        # Handle different expression types
+        if expression_node.data in ['divide', 'multiply', 'add', 'subtract']:
+            # Binary operation
+            if len(expression_node.children) >= 2:
+                left = self._extract_expression_operand(expression_node.children[0])
+                right = self._extract_expression_operand(expression_node.children[1])
+                
+                return {
+                    'type': 'binary_operation',
+                    'operator': expression_node.data,
+                    'left': left,
+                    'right': right
+                }
+        
+        elif expression_node.data == 'paren_expr':
+            # Parenthesized expression
+            if expression_node.children:
+                inner_expr = self._extract_expression(expression_node.children[0])
+                return {
+                    'type': 'parenthesized',
+                    'expression': inner_expr
+                }
+        
+        elif expression_node.data == 'member_expr':
+            # Member reference
+            member_path = self._extract_member_expr(expression_node)
+            return {
+                'type': 'member_reference',
+                'path': member_path
+            }
+        
+        elif expression_node.data == 'function_call':
+            # Function call
+            return self._extract_function_call(expression_node)
+        
+        # Handle literals that might be direct children
+        elif hasattr(expression_node, 'children') and len(expression_node.children) == 1:
+            child = expression_node.children[0]
+            if isinstance(child, Token):
+                if child.type == 'NUMBER':
+                    return {
+                        'type': 'literal',
+                        'value_type': 'number',
+                        'value': child.value
+                    }
+                elif child.type == 'STRING':
+                    return {
+                        'type': 'literal',
+                        'value_type': 'string',
+                        'value': child.value
+                    }
+        
+        return None
+    
+    def _extract_expression_operand(self, operand_node: Any) -> Optional[Dict[str, Any]]:
+        """Extract an operand from an arithmetic expression."""
+        if isinstance(operand_node, Tree):
+            if operand_node.data == 'member_expr':
+                member_path = self._extract_member_expr(operand_node)
+                return {
+                    'type': 'member_reference',
+                    'path': member_path
+                }
+            elif operand_node.data in ['divide', 'multiply', 'add', 'subtract']:
+                # Nested operation
+                return self._extract_expression(operand_node)
+            elif operand_node.data == 'paren_expr':
+                # Parenthesized expression
+                return self._extract_expression(operand_node)
+            elif operand_node.data == 'function_call':
+                # Function call
+                return self._extract_function_call(operand_node)
+        elif isinstance(operand_node, Token):
+            # Handle literals
+            if operand_node.type == 'NUMBER':
+                return {
+                    'type': 'literal',
+                    'value_type': 'number',
+                    'value': operand_node.value
+                }
+            elif operand_node.type == 'STRING':
+                return {
+                    'type': 'literal',
+                    'value_type': 'string',
+                    'value': operand_node.value
+                }
+        
+        return None
+    
+    def _extract_function_call(self, function_node: Tree) -> Optional[Dict[str, Any]]:
+        """Extract function call from expression."""
+        if not isinstance(function_node, Tree) or function_node.data != 'function_call':
+            return None
+        
+        function_name = None
+        args = []
+        
+        for child in function_node.children:
+            if isinstance(child, Tree):
+                if child.data == 'function_name':
+                    function_name = self._get_text(child)
+                elif child.data == 'function_args':
+                    # Extract function arguments
+                    for arg_node in child.children:
+                        if isinstance(arg_node, Tree):
+                            if arg_node.data == 'member_arg':
+                                # Member reference argument
+                                if arg_node.children and arg_node.children[0].data == 'member_expr':
+                                    member_path = self._extract_member_expr(arg_node.children[0])
+                                    args.append({
+                                        'type': 'member_reference',
+                                        'path': member_path
+                                    })
+                            elif arg_node.data == 'number_arg':
+                                # Number argument
+                                args.append({
+                                    'type': 'literal',
+                                    'value_type': 'number',
+                                    'value': self._get_text(arg_node)
+                                })
+                            elif arg_node.data == 'string_arg':
+                                # String argument
+                                args.append({
+                                    'type': 'literal',
+                                    'value_type': 'string',
+                                    'value': self._get_text(arg_node)
+                                })
+                            elif arg_node.data == 'set_arg':
+                                # Set argument (for complex functions)
+                                args.append({
+                                    'type': 'set',
+                                    'value': self._get_text(arg_node)
+                                })
+                            elif arg_node.data == 'paren_arg':
+                                # Parenthesized argument (nested function call)
+                                args.append({
+                                    'type': 'parenthesized',
+                                    'value': self._get_text(arg_node)
+                                })
+        
+        if function_name:
+            return {
+                'type': 'function_call',
+                'function': function_name,
+                'arguments': args
             }
         
         return None

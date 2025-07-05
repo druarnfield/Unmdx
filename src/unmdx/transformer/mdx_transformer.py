@@ -705,10 +705,20 @@ class MDXTransformer:
             # Get the token representing the operator
             for child in op_node.children:
                 if isinstance(child, Token):
-                    return str(child)  # Return the raw operator, BinaryOperation will handle conversion
+                    # Map token types to operator symbols
+                    token_to_op = {
+                        'PLUS': '+',
+                        'MINUS': '-',
+                        'MULTIPLY': '*',
+                        'DIVIDE': '/'
+                    }
+                    if child.type in token_to_op:
+                        return token_to_op[child.type]
+                    else:
+                        # Fallback to token value if type mapping fails
+                        return str(child.value)
             
             # If no children found, this indicates a parsing issue
-            # Try to infer the operator from context (this is a workaround)
             self._add_warning("Empty arithmetic operator node - grammar parsing issue detected")
             return "/"  # For calculated members, division is most common
         return "+"  # Default fallback

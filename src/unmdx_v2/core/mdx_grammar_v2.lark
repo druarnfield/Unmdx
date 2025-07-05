@@ -70,6 +70,14 @@ function_name: "CROSSJOIN"i
              | "UNION"i
              | "EXCEPT"i
              | "INTERSECT"i
+             | "DIVIDE"i
+             | "IIF"i
+             | "ISNULL"i
+             | "SUM"i
+             | "COUNT"i
+             | "AVG"i
+             | "MIN"i
+             | "MAX"i
              | identifier
 
 function_args: function_arg ("," function_arg)*
@@ -90,6 +98,7 @@ qualified_name: bracketed_name ("." bracketed_name)*
 // Expressions for calculations
 ?expression: arithmetic_expr
            | member_expr
+           | function_call
            | NUMBER
            | STRING
 

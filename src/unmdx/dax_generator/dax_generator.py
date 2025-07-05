@@ -210,12 +210,21 @@ class DAXGenerator:
         if not query.measures:
             return 'ROW("Value", BLANK())'
         
-        # For simple measure queries, use table literal syntax
-        if len(query.measures) == 1 and not query.filters:
-            measure = query.measures[0]
-            return f"{{ [{measure.name}] }}"
+        # For measure-only queries, use brace syntax for table literal
+        # This is preferred for simple measure queries
+        if not query.filters:
+            measure_refs = []
+            for measure in query.measures:
+                measure_refs.append(f"[{measure.name}]")
+            
+            if len(measure_refs) == 1:
+                return f"{{ {measure_refs[0]} }}"
+            else:
+                # Multi-line format for multiple measures
+                measure_list = ',\n    '.join(measure_refs)
+                return f"{{\n    {measure_list}\n}}"
         
-        # Use ROW function for multiple measures or filtered queries
+        # Use ROW function for filtered queries
         measure_pairs = []
         for measure in query.measures:
             name = measure.alias or measure.name

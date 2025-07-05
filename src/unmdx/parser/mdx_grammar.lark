@@ -172,7 +172,12 @@ calculation_expression: value_expression arithmetic_op value_expression
                       | "(" calculation_expression ")"
                       | function_call
 
-arithmetic_op: "+" | "-" | "*" | "/"
+arithmetic_op: PLUS | MINUS | MULTIPLY | DIVIDE
+
+PLUS: "+"
+MINUS: "-"
+MULTIPLY: "*"
+DIVIDE: "/"
 
 ?numeric_expression: NUMBER
                    | member_expression

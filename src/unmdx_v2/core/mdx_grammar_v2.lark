@@ -1,0 +1,118 @@
+//===========================
+// Minimal MDX Grammar for UnMDX v2
+// Focused on Test Cases 1-9 patterns
+//===========================
+
+?start: query
+
+// Main query structure
+query: with_clause? select_statement
+
+// WITH clause for calculated members (Test Case 7)
+with_clause: "WITH"i member_def+
+
+member_def: "MEMBER"i member_expr "AS"i expression
+
+// SELECT statement
+select_statement: "SELECT"i axis_spec ("," axis_spec)* "FROM"i cube_name where_clause?
+
+// Axis specification
+axis_spec: non_empty? set_expr "ON"i axis_id
+
+// NON EMPTY clause
+non_empty: "NON"i "EMPTY"i
+
+axis_id: "COLUMNS"i -> axis_columns
+       | "ROWS"i -> axis_rows
+       | NUMBER -> axis_number
+       | "AXIS"i "(" NUMBER ")" -> axis_explicit
+
+// WHERE clause (Test Cases 4, 9)
+where_clause: "WHERE"i where_expr
+
+where_expr: tuple_expr
+          | member_expr
+          | "(" ")" -> empty_where
+
+// Tuple expression for multiple filters
+tuple_expr: "(" member_or_key ("," member_or_key)* ")"
+
+// Member or key reference (key is now handled in member_tail)
+member_or_key: member_expr
+
+// Set expressions
+set_expr: "{" set_items? "}" -> explicit_set
+        | member_expr -> implicit_set
+        | function_call
+
+set_items: set_item ("," set_item)*
+
+// Use explicit rules to avoid ambiguity
+?set_item: "{" set_items? "}" -> nested_set
+         | tuple_expr -> tuple_item
+         | member_expr -> member_item
+
+// Member expression can be a path with optional function
+// Use a more explicit approach to avoid LALR conflicts
+member_expr: bracketed_name member_tail*
+
+// Member tail can be either another name part, a function, or a key reference
+member_tail: "." bracketed_name -> name_tail
+           | "." "Members"i -> members_tail
+           | "." "Children"i -> children_tail
+           | "." "&" bracketed_name -> key_tail
+
+// Function calls (for CrossJoin, etc.)
+function_call: function_name "(" function_args? ")"
+
+function_name: "CROSSJOIN"i
+             | "FILTER"i
+             | "UNION"i
+             | "EXCEPT"i
+             | "INTERSECT"i
+             | identifier
+
+function_args: function_arg ("," function_arg)*
+
+// Be more specific to avoid conflicts
+?function_arg: "{" set_items? "}" -> set_arg
+             | "(" function_args ")" -> paren_arg  
+             | member_expr -> member_arg
+             | NUMBER -> number_arg
+             | STRING -> string_arg
+
+// NOTE: member_path is now replaced by member_expr throughout the grammar
+// member_function is now part of member_tail
+
+// Qualified names with bracket notation (kept for other uses)
+qualified_name: bracketed_name ("." bracketed_name)*
+
+// Expressions for calculations
+?expression: arithmetic_expr
+           | member_expr
+           | NUMBER
+           | STRING
+
+arithmetic_expr: expression "/" expression -> divide
+               | expression "*" expression -> multiply
+               | expression "+" expression -> add
+               | expression "-" expression -> subtract
+               | "(" expression ")" -> paren_expr
+
+// Basic tokens
+cube_name: bracketed_name | identifier
+
+bracketed_name: "[" name_content "]"
+
+// Allow complex content inside brackets including spaces, dots, etc.
+name_content: /[^\[\]]+/
+
+identifier: /[A-Za-z_][A-Za-z0-9_]*/
+
+// Import common terminals
+%import common.NUMBER
+%import common.ESCAPED_STRING -> STRING
+%import common.WS
+
+// Ignore whitespace
+%ignore WS

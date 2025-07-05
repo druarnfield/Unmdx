@@ -230,8 +230,36 @@ class DAXGenerator:
         table = dimension.hierarchy.table
         column = dimension.level.name if dimension.level else dimension.hierarchy.name
         
-        # Generate proper table[column] format without extra spaces
-        return f"{table}[{column}]"
+        # Format table name properly (with single quotes if needed)
+        formatted_table = self._format_table_name(table)
+        # Format column name with brackets - always use brackets for column names
+        formatted_column = f"[{column}]"
+        
+        return f"{formatted_table}{formatted_column}"
+    
+    def _format_table_name(self, table_name: str) -> str:
+        """Format table name with proper quoting for DAX."""
+        # Quote table names that could conflict with DAX keywords or have special meaning
+        # Based on the test expectations, certain table names like 'Date' need quotes
+        dax_keywords = {
+            'DATE', 'TIME', 'YEAR', 'MONTH', 'DAY', 'HOUR', 'MINUTE', 'SECOND',
+            'TRUE', 'FALSE', 'ALL', 'FILTER', 'VALUES', 'DISTINCT'
+        }
+        
+        # Check if table name needs quoting
+        needs_quotes = (
+            table_name.upper() in dax_keywords or
+            ' ' in table_name or
+            '-' in table_name or
+            not table_name.replace('_', '').isalnum() or
+            table_name[0].isdigit()
+        )
+        
+        if needs_quotes:
+            escaped = table_name.replace("'", "''")  # Escape single quotes by doubling
+            return f"'{escaped}'"
+        else:
+            return table_name
     
     def _generate_filter_arguments(self, filters: List[Filter], dimensions: List[Dimension]) -> List[str]:
         """Generate filter arguments for SUMMARIZECOLUMNS."""

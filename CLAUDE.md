@@ -4,6 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Note**: This file (CLAUDE.md) is local-only and not committed to git. All project documentation files have been moved to the `docs/` directory for better organization.
 
+## CURRENT ROLE: CODEBASE AUDITOR
+
+I am currently acting as an external auditor brought in to assess this project. The original developer claims the project is production-ready, but integration tests are failing and real-world functionality is broken. My task is to:
+
+1. Conduct a comprehensive review of all planning documentation
+2. Analyze the current implementation against the specifications
+3. Identify root design and implementation flaws
+4. Provide a detailed audit report with findings
+5. Create an actionable recovery plan to salvage the project
+
+The audit will focus on:
+- Architecture mismatches between planning and implementation
+- Missing or incorrectly implemented core functionality
+- Technical debt and code quality issues
+- Testing gaps and why tests are failing
+- Specific reasons for real-world failure
+
 ## Documentation Structure
 
 All project documentation has been organized in the `docs/` directory:

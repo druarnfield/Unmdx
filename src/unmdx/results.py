@@ -123,6 +123,7 @@ class ParseResult:
     performance: PerformanceStats = field(default_factory=PerformanceStats)
     
     # Raw parsing information
+    parse_tree: Optional[Any] = None  # Parse tree from Lark parser
     ast_node_count: Optional[int] = None
     ir_construct_count: Optional[int] = None
     
@@ -317,6 +318,16 @@ class ExplanationResult:
         if self.markdown_explanation:
             available.append("markdown")
         return available
+    
+    @property
+    def explanation(self) -> Optional[str]:
+        """
+        Get explanation in the primary format used.
+        
+        Returns:
+            Explanation text in the format that was used for generation
+        """
+        return self.get_explanation("auto")
 
 
 @dataclass

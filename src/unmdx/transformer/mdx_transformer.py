@@ -12,7 +12,8 @@ from ..ir import (
     HierarchyReference, LevelReference, MemberSelection, DimensionFilter,
     AggregationType, MemberSelectionType, FilterType, FilterOperator,
     CalculationType, QueryMetadata, Expression, Constant, MeasureReference,
-    BinaryOperation, FunctionCall, MemberReference, FunctionType, ComparisonOperator
+    BinaryOperation, FunctionCall, MemberReference, FunctionType, ComparisonOperator,
+    NonEmptyFilter
 )
 from ..parser.mdx_parser import MDXParser, MDXParseError
 from ..utils.logging import get_logger
@@ -259,20 +260,21 @@ class MDXTransformer:
         return dimensions
     
     def _extract_filters(self, tree: Tree) -> List[Filter]:
-        """Extract filters from WHERE clause."""
+        """Extract filters from WHERE clause and NON EMPTY specifications."""
         self.current_context = "filters"
         filters = []
         
         # Look for WHERE clause
         where_nodes = self._find_nodes(tree, "where_clause")
-        if not where_nodes:
-            return filters
+        if where_nodes:
+            where_node = where_nodes[0]
+            # Extract filter expressions
+            filter_exprs = self._extract_filter_expressions(where_node)
+            filters.extend(filter_exprs)
         
-        where_node = where_nodes[0]
-        
-        # Extract filter expressions
-        filter_exprs = self._extract_filter_expressions(where_node)
-        filters.extend(filter_exprs)
+        # Look for NON EMPTY specifications in axis specifications
+        non_empty_filters = self._extract_non_empty_filters(tree)
+        filters.extend(non_empty_filters)
         
         return filters
     
@@ -606,6 +608,41 @@ class MDXTransformer:
             filter_obj = self._create_filter_from_member_expr(member_expr)
             if filter_obj:
                 filters.append(filter_obj)
+        
+        return filters
+    
+    def _extract_non_empty_filters(self, tree: Tree) -> List[Filter]:
+        """Extract NON EMPTY filters from axis specifications."""
+        filters = []
+        
+        # Look for SELECT statement
+        select_nodes = self._find_nodes(tree, "select_statement")
+        if not select_nodes:
+            return filters
+        
+        select_node = select_nodes[0]
+        
+        # Find axis specifications with NON EMPTY
+        axis_nodes = self._find_nodes(select_node, "axis_specification")
+        measures = []
+        
+        for axis_node in axis_nodes:
+            # Check if this axis has NON EMPTY
+            if self._has_non_empty(axis_node):
+                # Extract measures from this axis to determine which measure to use for filtering
+                axis_measures = self._extract_measures_from_axis(axis_node)
+                measures.extend(axis_measures)
+        
+        # If we found NON EMPTY and have measures, create a NonEmptyFilter
+        if measures:
+            # Use the first measure for the NON EMPTY filter
+            primary_measure = measures[0].name
+            non_empty_filter = NonEmptyFilter(measure=primary_measure)
+            filter_obj = Filter(
+                filter_type=FilterType.NON_EMPTY,
+                target=non_empty_filter
+            )
+            filters.append(filter_obj)
         
         return filters
     
@@ -1059,3 +1096,8 @@ class MDXTransformer:
                 if isinstance(child, Tree) and self._is_ancestor_of(child, descendant):
                     return True
         return False
+    
+    def _has_non_empty(self, axis_node: Tree) -> bool:
+        """Check if an axis specification has NON EMPTY."""
+        non_empty_nodes = self._find_nodes(axis_node, "non_empty")
+        return len(non_empty_nodes) > 0

@@ -163,7 +163,15 @@ class MDXTransformer(Transformer):
             # Check if it's a dimension with .Members
             elif len(path_parts) >= 3 and path_parts[-1] == 'Members':
                 table = path_parts[0]
-                column = path_parts[1]
+                # For multi-level dimensions like [Date].[Calendar].[Calendar Year].Members,
+                # we want to use the full path except for the table name
+                if len(path_parts) == 3:
+                    # Simple case: [Table].[Column].Members
+                    column = path_parts[1]
+                else:
+                    # Multi-level case: [Date].[Calendar].[Calendar Year].Members
+                    # Join the middle parts as the column name
+                    column = '.'.join(path_parts[1:-1])
                 
                 # Check if we already have this dimension
                 existing = next((d for d in self.dimensions if d['table'] == table and d['column'] == column), None)
@@ -410,7 +418,15 @@ def transform_parse_tree(parse_tree: Tree) -> Dict[str, Any]:
             # Check if it's a dimension with .Members
             elif len(path_parts) >= 3 and path_parts[-1] == 'Members':
                 table = path_parts[0]
-                column = path_parts[1]
+                # For multi-level dimensions like [Date].[Calendar].[Calendar Year].Members,
+                # we want to use the full path except for the table name
+                if len(path_parts) == 3:
+                    # Simple case: [Table].[Column].Members
+                    column = path_parts[1]
+                else:
+                    # Multi-level case: [Date].[Calendar].[Calendar Year].Members
+                    # Join the middle parts as the column name
+                    column = '.'.join(path_parts[1:-1])
                 
                 # Check if we already have this dimension
                 existing = next((d for d in dimensions if d['table'] == table and d['column'] == column), None)

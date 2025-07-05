@@ -165,7 +165,6 @@ class DAXGenerator:
         if query.dimensions:
             # Use SUMMARIZECOLUMNS for dimensional queries
             table_expr = self._generate_summarizecolumns(query)
-            return f"EVALUATE\n{table_expr}"
         else:
             # Simple measure-only query
             table_expr = self._generate_measure_table(query)
@@ -176,8 +175,11 @@ class DAXGenerator:
             elif query.limit:
                 # OFFSET not directly supported - add warning
                 self.warnings.append("OFFSET is not directly supported in DAX - consider using ranking functions")
-            
-            return f"EVALUATE\n{table_expr}"
+        
+        # Check if we need to wrap with FILTER for NON EMPTY
+        table_expr = self._apply_non_empty_filter(table_expr, query)
+        
+        return f"EVALUATE\n{table_expr}"
     
     def _generate_summarizecolumns(self, query: Query) -> str:
         """Generate SUMMARIZECOLUMNS function for dimensional queries."""
@@ -402,6 +404,29 @@ class DAXGenerator:
     def get_warnings(self) -> List[str]:
         """Get list of warnings generated during conversion."""
         return self.warnings.copy()
+    
+    def _apply_non_empty_filter(self, table_expr: str, query: Query) -> str:
+        """Apply NON EMPTY filter wrapping if needed."""
+        # Check if query has NON EMPTY filters
+        non_empty_filters = [f for f in query.filters if f.filter_type == FilterType.NON_EMPTY]
+        
+        if non_empty_filters:
+            # Get the measure to use for the NON EMPTY filter
+            non_empty_filter = non_empty_filters[0].target
+            measure_name = non_empty_filter.measure
+            
+            # If no specific measure specified, use the first measure from the query
+            if not measure_name and query.measures:
+                measure_name = query.measures[0].name
+            
+            if measure_name:
+                # Indent the table expression by 4 more spaces when wrapping in FILTER
+                indented_table_expr = '\n'.join('    ' + line if line.strip() else line 
+                                              for line in table_expr.split('\n'))
+                # Wrap the table expression with FILTER
+                return f"FILTER(\n{indented_table_expr},\n    [{measure_name}] <> BLANK()\n)"
+        
+        return table_expr
     
     def validate_for_dax(self, query: Query) -> List[str]:
         """
